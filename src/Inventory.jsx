@@ -1,0 +1,234 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from './supabaseClient';
+
+export default function Inventory() {
+  const [books, setBooks] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentBookId, setCurrentBookId] = useState(null);
+
+  // 1. Define the default empty state
+  const initialFormState = {
+    accession_num: '',
+    title: '',
+    authors: '',
+    quantity: 1,
+    date_acquired: new Date().toISOString().split('T')[0],
+    edition: '',
+    pages: '',
+    book_type: 'Hardbound',
+    subject_class: '',
+    cost_price: '',
+    publisher: '',
+    isbn: '',
+    copyright: '',
+    source: '',
+    remark: '',
+    status: 'active'
+  };
+
+  const [formData, setFormData] = useState(initialFormState);
+
+  useEffect(() => {
+    fetchInventory();
+  }, []);
+
+  async function fetchInventory() {
+    // We only fetch books that are 'active'
+    const { data, error } = await supabase
+      .from('books')
+      .select('*')
+      .neq('status', 'archived')
+      .order('created_at', { ascending: false });
+    
+    if (error) console.error("Fetch error:", error);
+    else setBooks(data || []);
+  }
+
+  // --- OPEN MODAL FOR ADDING ---
+  const openAddModal = async () => {
+    console.log("Add button clicked"); // Debug check
+    setIsEditing(false);
+    
+    // Auto-generate next accession number
+    const { data } = await supabase
+      .from('books')
+      .select('accession_num')
+      .order('accession_num', { ascending: false })
+      .limit(1);
+    
+    const lastNum = data && data[0] ? parseInt(data[0].accession_num) : 0;
+    const nextAcc = (lastNum + 1).toString().padStart(5, '0');
+
+    setFormData({ ...initialFormState, accession_num: nextAcc });
+    setShowModal(true);
+  };
+
+  // --- OPEN MODAL FOR EDITING ---
+  const openEditModal = (book) => {
+    setIsEditing(true);
+    setCurrentBookId(book.id);
+    setFormData({ ...book });
+    setShowModal(true);
+  };
+
+  // --- ARCHIVE LOGIC ---
+  const handleArchive = async (book) => {
+    const confirmed = window.confirm(`Archive "${book.title}"? It will be hidden from the catalog.`);
+    if (confirmed) {
+      const { error } = await supabase
+        .from('books')
+        .update({ status: 'archived' })
+        .eq('id', book.id);
+
+      if (error) alert("Archive failed: " + error.message);
+      else fetchInventory();
+    }
+  };
+
+  const handleSaveBook = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    if (isEditing) {
+      const { error } = await supabase
+        .from('books')
+        .update(formData)
+        .eq('id', currentBookId);
+      if (error) alert(error.message);
+    } else {
+      const { error } = await supabase.from('books').insert([formData]);
+      if (error) alert(error.message);
+    }
+
+    setShowModal(false);
+    fetchInventory();
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ padding: '30px', background: '#f8fafc', minHeight: '100vh' }}>
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
+        <div>
+          <h2 style={{ color: '#1e3a8a', margin: 0 }}>Book Inventory</h2>
+          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Manage technical records and collection status.</p>
+        </div>
+        {/* RE-FIXED BUTTON */}
+        <button 
+          onClick={openAddModal} 
+          style={addBtnStyle}
+        >
+          + Add New Book
+        </button>
+      </header>
+
+      <div style={tableCardStyle}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ textAlign: 'left', background: '#f1f5f9', color: '#475569' }}>
+              <th style={thStyle}>Acc #</th>
+              <th style={thStyle}>Title</th>
+              <th style={thStyle}>Author</th>
+              <th style={thStyle}>Qty</th>
+              <th style={thStyle}>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {books.length === 0 ? (
+              <tr><td colSpan="5" style={{ padding: '30px', textAlign: 'center', color: '#94a3b8' }}>No active books found.</td></tr>
+            ) : (
+              books.map(book => (
+                <tr key={book.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                  <td style={tdStyle}><code style={codeStyle}>{book.accession_num}</code></td>
+                  <td style={tdStyle}><strong>{book.title}</strong></td>
+                  <td style={tdStyle}>{book.authors}</td>
+                  <td style={tdStyle}>{book.quantity}</td>
+                  <td style={tdStyle}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => openEditModal(book)} style={editBtnSmallStyle}>Edit</button>
+                      <button onClick={() => handleArchive(book)} style={archiveBtnStyle}>Archive</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* MODAL */}
+      {showModal && (
+        <div style={modalOverlayStyle}>
+          <div style={modalContentStyle}>
+            <h3 style={{ color: '#1e3a8a', marginBottom: '20px' }}>
+              {isEditing ? 'Update Book Details' : 'Register New Book'}
+            </h3>
+            <form onSubmit={handleSaveBook}>
+              <div style={formGridStyle}>
+                <div style={{ ...inputGroup, gridColumn: 'span 1', background: '#eff6ff', padding: '10px', borderRadius: '8px' }}>
+                  <label style={labelStyle}>Accession # / Barcode</label>
+                  <input 
+                    type="text" 
+                    required 
+                    style={inputStyle} 
+                    value={formData.accession_num} 
+                    onChange={e => setFormData({...formData, accession_num: e.target.value})} 
+                  />
+                </div>
+                <div style={inputGroup}>
+                  <label style={labelStyle}>ISBN</label>
+                  <input type="text" style={inputStyle} value={formData.isbn || ''} onChange={e => setFormData({...formData, isbn: e.target.value})} />
+                </div>
+                <div style={{ ...inputGroup, gridColumn: 'span 2' }}>
+                  <label style={labelStyle}>Title</label>
+                  <input type="text" required style={inputStyle} value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                </div>
+                <div style={inputGroup}>
+                  <label style={labelStyle}>Authors</label>
+                  <input type="text" required style={inputStyle} value={formData.authors} onChange={e => setFormData({...formData, authors: e.target.value})} />
+                </div>
+                <div style={inputGroup}>
+                  <label style={labelStyle}>Quantity</label>
+                  <input type="number" style={inputStyle} value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                </div>
+                <div style={inputGroup}>
+                  <label style={labelStyle}>Subject Class</label>
+                  <input type="text" style={inputStyle} value={formData.subject_class || ''} onChange={e => setFormData({...formData, subject_class: e.target.value})} />
+                </div>
+                <div style={inputGroup}>
+                  <label style={labelStyle}>Publisher</label>
+                  <input type="text" style={inputStyle} value={formData.publisher || ''} onChange={e => setFormData({...formData, publisher: e.target.value})} />
+                </div>
+              </div>
+              <div style={modalFooter}>
+                <button type="button" onClick={() => setShowModal(false)} style={cancelBtnStyle}>Cancel</button>
+                <button type="submit" disabled={loading} style={saveBtnStyle}>
+                  {loading ? 'Saving...' : 'Confirm Details'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- STYLES ---
+const addBtnStyle = { background: '#2563eb', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', zIndex: 10, position: 'relative' };
+const tableCardStyle = { background: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', overflow: 'hidden' };
+const thStyle = { padding: '15px' };
+const tdStyle = { padding: '15px', fontSize: '0.9rem' };
+const codeStyle = { background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontFamily: 'monospace', color: '#1e3a8a', fontWeight: 'bold' };
+const editBtnSmallStyle = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
+const archiveBtnStyle = { background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
+const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
+const modalContentStyle = { background: 'white', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' };
+const formGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' };
+const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
+const labelStyle = { fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b' };
+const inputStyle = { padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' };
+const modalFooter = { display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '30px' };
+const saveBtnStyle = { background: '#2563eb', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const cancelBtnStyle = { background: 'transparent', color: '#64748b', border: 'none', fontWeight: '600', cursor: 'pointer' };

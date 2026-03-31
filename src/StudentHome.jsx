@@ -1,18 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import StudentNavbar from './StudentNavbar';
+import { supabase } from './supabaseClient';
 
 export default function StudentHome() {
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    async function fetchUserName() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('users')
+          .select('name')
+          .eq('auth_id', user.id)
+          .single();
+        if (data?.name) setUserName(data.name);
+      }
+    }
+    fetchUserName();
+  }, []);
+
   return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
-      <StudentNavbar/>
+      <StudentNavbar />
       
       {/* Hero Section */}
       <div style={{ background: 'var(--maroon)', padding: '60px 20px', textAlign: 'center', color: 'white' }}>
-        <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>Welcome back, Jane Doe!</h1>
+        <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>
+          Welcome back{userName ? `, ${userName}` : ''}!
+        </h1>
         <p style={{ opacity: 0.9, marginBottom: '25px' }}>What would you like to read today?</p>
-        <button style={{ background: 'var(--yellow)', color: 'var(--maroon)', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}>
+        <a href="/student/catalog" style={{ background: 'var(--yellow)', color: 'var(--maroon)', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', textDecoration: 'none' }}>
           Open Catalog →
-        </button>
+        </a>
       </div>
 
       <div style={{ maxWidth: '1200px', margin: '-40px auto 0', padding: '0 20px 40px' }}>

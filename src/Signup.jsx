@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 import { useNavigate, Link } from 'react-router-dom';
+import myLogo from './assets/logo.png';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -9,7 +10,7 @@ export default function Signup() {
     name: '',
     student_id: '',
     course_year: '',
-    role: 'student' // Default to student
+    role: 'student'
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -19,7 +20,6 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      // 1. Create the account in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -28,19 +28,16 @@ export default function Signup() {
       if (authError) throw authError;
 
       if (authData.user) {
-        // 2. Create the profile in your public.users table
         const { error: profileError } = await supabase
           .from('users')
-          .insert([
-            {
-              auth_id: authData.user.id,
-              name: formData.name,
-              student_id: formData.student_id,
-              course_year: formData.course_year,
-              role: formData.role,
-              status: 'active'
-            }
-          ]);
+          .insert([{
+            auth_id: authData.user.id,
+            name: formData.name,
+            student_id: formData.student_id,
+            course_year: formData.course_year,
+            role: formData.role,
+            status: 'active'
+          }]);
 
         if (profileError) throw profileError;
 
@@ -59,67 +56,157 @@ export default function Signup() {
   };
 
   return (
-    <div className="login-wrapper">
-      <div className="login-split-card" style={{ maxWidth: '1000px' }}>
-        
-        {/* Left Side: Information */}
-        <div className="login-left">
-          <img src="src/assets/logo.png" alt="ShelfMaster Logo" className="login-left-logo" />
-          <h2>Join ShelfMaster</h2>
-          <p>Create your account to start borrowing books, tracking your due dates, and exploring our digital catalog.</p>
-          <div style={{ marginTop: '20px', textAlign: 'left', fontSize: '0.85rem' }}>
-            <p>✅ Access thousands of titles</p>
-            <p>✅ Real-time availability checks</p>
-            <p>✅ Automated due-date reminders</p>
+    <div style={wrapperStyle}>
+      {/* LEFT PANEL */}
+      <div style={leftPanelStyle}>
+        <div style={overlayStyle}></div>
+        <div style={leftContentStyle}>
+          <img src={myLogo} alt="Logo" style={{ width: '70px', marginBottom: '20px' }} />
+          <h1 style={{ color: 'white', fontSize: '3rem', fontWeight: '800', margin: 0 }}>Join ShelfMaster</h1>
+          <p style={{ color: 'rgba(255,255,255,0.85)', fontSize: '1.1rem', marginTop: '12px', lineHeight: '1.6' }}>
+            Create your account and start exploring our library.
+          </p>
+          <div style={{ marginTop: '40px', display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.95rem', color: 'rgba(255,255,255,0.8)' }}>
+            <span>✅ Access thousands of titles</span>
+            <span>✅ Real-time availability checks</span>
+            <span>✅ Automated due-date reminders</span>
           </div>
         </div>
+      </div>
 
-        {/* Right Side: Form */}
-        <div className="login-right">
-          <h2>Create Account</h2>
-          <p>Enter your details below to register</p>
+      {/* RIGHT PANEL */}
+      <div style={rightPanelStyle}>
+        <div style={formCardStyle}>
+          <Link to="/" style={homeLinkStyle}>← Back to Home</Link>
 
-          <form className="login-form-container" onSubmit={handleSignup} style={{ maxWidth: '400px' }}>
-            <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Full Name</label>
-            <div className="input-group">
-              <input type="text" name="name" placeholder="John Doe" onChange={handleChange} required />
+          <img src={myLogo} alt="Logo" style={logoStyle} />
+
+          <h2 style={{ textAlign: 'center', color: 'var(--maroon)', marginBottom: '6px', fontSize: '1.5rem', fontWeight: '800' }}>
+            Create Account
+          </h2>
+          <p style={{ textAlign: 'center', color: '#64748b', marginBottom: '24px', fontSize: '0.9rem' }}>
+            Fill in your details to register
+          </p>
+
+          <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Full Name</label>
+              <input type="text" name="name" placeholder="John Doe" style={inputStyle} onChange={handleChange} required />
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Student ID</label>
-                <div className="input-group">
-                  <input type="text" name="student_id" placeholder="2024-0001" onChange={handleChange} required />
-                </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1, ...inputGroupStyle }}>
+                <label style={labelStyle}>Student ID</label>
+                <input type="text" name="student_id" placeholder="2024-0001" style={inputStyle} onChange={handleChange} required />
               </div>
-              <div style={{ flex: 1 }}>
-                <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Course & Year</label>
-                <div className="input-group">
-                  <input type="text" name="course_year" placeholder="BSCpE-1" onChange={handleChange} required />
-                </div>
+              <div style={{ flex: 1, ...inputGroupStyle }}>
+                <label style={labelStyle}>Course & Year</label>
+                <input type="text" name="course_year" placeholder="BSCpE-1" style={inputStyle} onChange={handleChange} required />
               </div>
             </div>
 
-            <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Email Address</label>
-            <div className="input-group">
-              <input type="email" name="email" placeholder="email@example.com" onChange={handleChange} required />
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Email Address</label>
+              <input type="email" name="email" placeholder="email@example.com" style={inputStyle} onChange={handleChange} required />
             </div>
 
-            <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Password</label>
-            <div className="input-group">
-              <input type="password" name="password" placeholder="••••••••" onChange={handleChange} required />
+            <div style={inputGroupStyle}>
+              <label style={labelStyle}>Password</label>
+              <input type="password" name="password" placeholder="••••••••" style={inputStyle} onChange={handleChange} required />
             </div>
 
-            <button type="submit" className="btn-submit" disabled={loading} style={{ marginTop: '10px' }}>
+            <button type="submit" disabled={loading} style={buttonStyle}>
               {loading ? 'Creating Account...' : 'Sign Up'}
             </button>
           </form>
 
-          <p style={{ marginTop: '20px', fontSize: '0.9rem' }}>
-            Already have an account? <Link to="/login" style={{ color: 'var(--dark-blue)', fontWeight: 'bold' }}>Log In</Link>
-          </p>
+          <div style={{ textAlign: 'center', marginTop: '16px' }}>
+            <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
+              Already have an account?{' '}
+              <Link to="/login" style={{ color: 'var(--green)', fontWeight: '700', textDecoration: 'none' }}>
+                Sign In
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+const wrapperStyle = { display: 'flex', height: '100vh', width: '100vw', overflow: 'hidden' };
+
+const leftPanelStyle = {
+  flex: '1.2',
+  background: 'linear-gradient(135deg, var(--maroon) 0%, #6B0D0D 100%)',
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
+};
+
+const overlayStyle = {
+  position: 'absolute',
+  top: 0, left: 0, width: '100%', height: '100%',
+  backgroundImage: "url('/library.png')",
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  opacity: 0.08,
+  zIndex: 1
+};
+
+const leftContentStyle = { position: 'relative', zIndex: 2, padding: '60px', width: '100%' };
+
+const rightPanelStyle = {
+  flex: '1',
+  background: 'var(--cream)',
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  overflowY: 'auto',
+  padding: '20px 0'
+};
+
+const formCardStyle = {
+  width: '100%',
+  maxWidth: '420px',
+  padding: '28px',
+  background: 'white',
+  borderRadius: '20px',
+  boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+};
+
+const homeLinkStyle = {
+  display: 'inline-block',
+  color: 'var(--maroon)',
+  textDecoration: 'none',
+  fontSize: '0.85rem',
+  fontWeight: '600',
+  marginBottom: '16px',
+  opacity: 0.7
+};
+
+const logoStyle = { width: '56px', margin: '0 auto 16px', display: 'block' };
+const inputGroupStyle = { display: 'flex', flexDirection: 'column', gap: '5px' };
+const labelStyle = { fontSize: '0.8rem', fontWeight: '600', color: '#475569' };
+
+const inputStyle = {
+  padding: '11px 14px',
+  borderRadius: '8px',
+  border: '1px solid #e2e8f0',
+  fontSize: '0.95rem',
+  background: 'var(--cream)',
+  outline: 'none'
+};
+
+const buttonStyle = {
+  background: 'var(--maroon)',
+  color: 'white',
+  padding: '13px',
+  borderRadius: '10px',
+  border: 'none',
+  fontWeight: 'bold',
+  fontSize: '1rem',
+  cursor: 'pointer',
+  marginTop: '4px'
+};

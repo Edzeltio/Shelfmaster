@@ -1,10 +1,26 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
-import myLogo from './assets/logo.png'; // Ensure path is correct
+import myLogo from './assets/logo.png';
 
-export default function StudentNavbar({ userName }) {
+export default function StudentNavbar() {
   const navigate = useNavigate();
+  const [userName, setUserName] = useState('');
+
+  useEffect(() => {
+    async function fetchUserName() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data } = await supabase
+          .from('users')
+          .select('name')
+          .eq('auth_id', user.id)
+          .single();
+        if (data?.name) setUserName(data.name);
+      }
+    }
+    fetchUserName();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -13,13 +29,11 @@ export default function StudentNavbar({ userName }) {
 
   return (
     <nav style={navStyle}>
-      {/* Left Side: Logo and Brand */}
       <div style={logoSectionStyle}>
         <img src={myLogo} alt="ShelfMaster Logo" style={logoImgStyle} />
         <span style={brandNameStyle}>ShelfMaster</span>
       </div>
 
-      {/* Center/Right Side: Links */}
       <div style={linksContainerStyle}>
         <Link to="/student/dashboard" style={linkStyle}>Home</Link>
         <Link to="/student/catalog" style={linkStyle}>Catalog</Link>
@@ -27,7 +41,7 @@ export default function StudentNavbar({ userName }) {
         <Link to="/student/cart" style={linkStyle}>Cart</Link>
         
         <div style={userSectionStyle}>
-          <span style={userNameStyle}>{userName || 'Student'}</span>
+          {userName && <span style={userNameStyle}>{userName}</span>}
           <button onClick={handleLogout} style={logoutButtonStyle}>Logout</button>
         </div>
       </div>
@@ -35,7 +49,6 @@ export default function StudentNavbar({ userName }) {
   );
 }
 
-// --- Styles ---
 const navStyle = {
   display: 'flex',
   justifyContent: 'space-between',
@@ -48,17 +61,8 @@ const navStyle = {
   zIndex: 1000
 };
 
-const logoSectionStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px'
-};
-
-const logoImgStyle = {
-  width: '40px',
-  height: '40px',
-  objectFit: 'contain'
-};
+const logoSectionStyle = { display: 'flex', alignItems: 'center', gap: '12px' };
+const logoImgStyle = { width: '40px', height: '40px', objectFit: 'contain' };
 
 const brandNameStyle = {
   fontSize: '1.4rem',
@@ -67,11 +71,7 @@ const brandNameStyle = {
   letterSpacing: '-0.5px'
 };
 
-const linksContainerStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '25px'
-};
+const linksContainerStyle = { display: 'flex', alignItems: 'center', gap: '25px' };
 
 const linkStyle = {
   textDecoration: 'none',
@@ -91,7 +91,7 @@ const userSectionStyle = {
 };
 
 const userNameStyle = {
-  color: '#1e293b',
+  color: 'var(--maroon)',
   fontWeight: '600',
   fontSize: '0.9rem'
 };
@@ -99,9 +99,9 @@ const userNameStyle = {
 const logoutButtonStyle = {
   padding: '8px 16px',
   borderRadius: '6px',
-  border: '1px solid #e11d48',
+  border: '1px solid var(--maroon)',
   background: 'transparent',
-  color: '#e11d48',
+  color: 'var(--maroon)',
   fontWeight: 'bold',
   cursor: 'pointer',
   fontSize: '0.85rem',

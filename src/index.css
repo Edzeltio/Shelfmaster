@@ -3,12 +3,14 @@
    ========================================== */
 :root {
   /* ShelfMaster Color Palette */
-  --maroon: #980404;    /* Maroon for headers and primary branding */
-  --green: #93bd57;     /* Action blue for primary buttons */
-  --light-blue: #FFF;   /* Soft blue for highlights and backgrounds */
+  --maroon: #8C1010;       /* Dark red for headers and primary branding */
+  --green: #7DB356;        /* Medium green for primary buttons and accents */
+  --yellow: #F0E070;       /* Soft yellow for highlights and badges */
+  --cream: #FAFFF0;        /* Light cream for app background */
+  --light-blue: #FFF;      /* White for cards and panels */
   --text-main: #1e293b;    /* Slate-800 for primary text */
   --text-muted: #64748b;   /* Slate-500 for secondary text */
-  --bg-main: #fffde1;      /* Very light slate for app background */
+  --bg-main: #FAFFF0;      /* Light cream background */
 }
 
 * {
@@ -111,8 +113,8 @@ body {
 }
 
 .hero-btn {
-  background-color: #f59e0b; /* Amber warning/action color */
-  color: white;
+  background-color: var(--yellow); /* Yellow accent from palette */
+  color: var(--maroon);
   padding: 15px 35px;
   border-radius: 8px;
   text-decoration: none;

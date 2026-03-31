@@ -206,8 +206,8 @@ export default function BorrowingHistory() {
                   <td style={{ padding: '12px' }}>
                      <span style={{ 
                        padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
-                       background: overdue ? '#e11d48' : (item.status === 'returned' ? '#dcfce7' : '#eff6ff'),
-                       color: overdue ? 'white' : (item.status === 'returned' ? '#059669' : '#2563eb')
+                       background: overdue ? '#e11d48' : (item.status === 'returned' ? '#dcfce7' : '#F5FAE8'),
+                       color: overdue ? 'white' : (item.status === 'returned' ? '#059669' : 'var(--green)')
                      }}>
                        {overdue ? 'OVERDUE' : item.status?.toUpperCase()}
                      </span>

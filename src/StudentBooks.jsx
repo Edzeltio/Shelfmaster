@@ -41,10 +41,10 @@ export default function Studentbook() {
   };
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <StudentNavbar userName="Jane Doe" />
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
-        <h2 style={{ color: '#1e3a8a', marginBottom: '20px' }}>My Active Loans</h2>
+        <h2 style={{ color: 'var(--maroon)', marginBottom: '20px' }}>My Active Loans</h2>
         
         {loading ? <p>Loading your books...</p> : (
           <div style={tableContainerStyle}>
@@ -88,6 +88,6 @@ export default function Studentbook() {
 
 // Styles (same as before)
 const tableContainerStyle = { background: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' };
-const headerRowStyle = { textAlign: 'left', background: '#f1f5f9', color: '#475569' };
+const headerRowStyle = { textAlign: 'left', background: '#F5FAE8', color: '#475569' };
 const thStyle = { padding: '15px' };
 const tdStyle = { padding: '15px' };

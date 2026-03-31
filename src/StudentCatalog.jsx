@@ -4,7 +4,7 @@ import StudentNavbar from './StudentNavbar';
 
 export default function StudentCatalog() {
   const [books, setBooks] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(''); // New state for search
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -18,7 +18,6 @@ export default function StudentCatalog() {
     setLoading(false);
   }
 
-  // --- Search Logic ---
   const filteredBooks = books.filter((book) => {
     const searchStr = searchTerm.toLowerCase();
     return (
@@ -29,14 +28,13 @@ export default function StudentCatalog() {
   });
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <StudentNavbar userName="Jane Doe" />
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>
         
-        {/* Header and Search Bar Section */}
         <div style={headerSectionStyle}>
-          <h2 style={{ color: '#1e3a8a', margin: 0 }}>Library Catalog</h2>
+          <h2 style={{ color: 'var(--maroon)', margin: 0 }}>Library Catalog</h2>
           
           <div style={searchContainerStyle}>
             <span style={searchIconStyle}></span>
@@ -90,8 +88,6 @@ export default function StudentCatalog() {
   );
 }
 
-// --- Styles ---
-
 const headerSectionStyle = {
   display: 'flex',
   justifyContent: 'space-between',
@@ -122,7 +118,7 @@ const searchInputStyle = {
   borderRadius: '12px',
   border: '1px solid #e2e8f0',
   fontSize: '1rem',
-  outlineColor: '#2563eb',
+  outlineColor: 'var(--green)',
   boxShadow: '0 2px 5px rgba(0,0,0,0.02)',
   boxSizing: 'border-box'
 };
@@ -146,8 +142,8 @@ const cardStyle = {
 
 const categoryBadgeStyle = {
   fontSize: '0.7rem',
-  background: '#eff6ff',
-  color: '#2563eb',
+  background: '#F5FAE8',
+  color: 'var(--green)',
   padding: '4px 10px',
   borderRadius: '20px',
   fontWeight: 'bold',
@@ -162,7 +158,7 @@ const footerStyle = { display: 'flex', justifyContent: 'space-between', alignIte
 const stockStyle = { fontSize: '0.85rem', fontWeight: '500' };
 
 const buttonStyle = {
-  background: '#2563eb',
+  background: 'var(--green)',
   color: 'white',
   border: 'none',
   padding: '8px 16px',

@@ -17,14 +17,12 @@ export default function LibrarianDashboard() {
   async function fetchDashboardData() {
     setLoading(true);
     
-    // 1. Fetch Real-time Stats
     const { count: books } = await supabase.from('books').select('*', { count: 'exact', head: true });
     const { count: loans } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed');
     const { count: pending } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending');
 
     setStats({ totalBooks: books || 0, activeLoans: loans || 0, pending: pending || 0 });
 
-    // 2. Fetch Circulation Data (Last 7 Days)
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
@@ -47,14 +45,11 @@ export default function LibrarianDashboard() {
 
     setChartData(Object.keys(dateMap).map(key => ({ date: key, loans: dateMap[key] })));
 
-    // 3. Fetch Top 5 Borrowed Books
-    // This assumes you have a 'books' relation in transactions
     const { data: topData } = await supabase
       .from('transactions')
       .select('book_id, books(title, authors)')
-      .limit(20); // Get a sample to count
+      .limit(20);
 
-    // Simple count logic for top books
     const counts = {};
     topData?.forEach(t => {
       const title = t.books?.title || "Unknown";
@@ -73,36 +68,36 @@ export default function LibrarianDashboard() {
   return (
     <div style={{ padding: '20px' }}>
       <header style={{ marginBottom: '30px' }}>
-        <h1 style={{ color: 'var(--dark-blue)', margin: 0 }}>Librarian Dashboard</h1>
+        <h1 style={{ color: 'var(--maroon)', margin: 0 }}>Librarian Dashboard</h1>
         <p style={{ color: '#64748b' }}>Welcome back! Here is what's happening in your library today.</p>
       </header>
 
       {/* STATS CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-        <StatCard title="Total Collection" value={stats.totalBooks} color="#2563eb" />
-        <StatCard title="Active Loans" value={stats.activeLoans} color="#059669" />
-        <StatCard title="Pending Requests" value={stats.pending} color="#d97706" />
+        <StatCard title="Total Collection" value={stats.totalBooks} color="var(--maroon)" />
+        <StatCard title="Active Loans" value={stats.activeLoans} color="var(--green)" />
+        <StatCard title="Pending Requests" value={stats.pending} color="var(--yellow)" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
         
         {/* CHART SECTION */}
         <div style={cardStyle}>
-          <h3 style={{ margin: '0 0 20px 0', color: 'var(--dark-blue)' }}>Monthly Circulation Trends</h3>
+          <h3 style={{ margin: '0 0 20px 0', color: 'var(--maroon)' }}>Monthly Circulation Trends</h3>
           <div style={{ width: '100%', height: 300 }}>
             <ResponsiveContainer>
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorLoans" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#7DB356" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#7DB356" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 12}} />
                 <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                <Area type="monotone" dataKey="loans" stroke="#2563eb" strokeWidth={3} fillOpacity={1} fill="url(#colorLoans)" />
+                <Area type="monotone" dataKey="loans" stroke="#7DB356" strokeWidth={3} fillOpacity={1} fill="url(#colorLoans)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -110,12 +105,12 @@ export default function LibrarianDashboard() {
 
         {/* TOP BOOKS SECTION */}
         <div style={cardStyle}>
-          <h3 style={{ margin: '0 0 20px 0', color: 'var(--dark-blue)' }}>Most Popular Books</h3>
+          <h3 style={{ margin: '0 0 20px 0', color: 'var(--maroon)' }}>Most Popular Books</h3>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {topBooks.length > 0 ? topBooks.map((book, i) => (
               <li key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 0', borderBottom: i < 4 ? '1px solid #f1f5f9' : 'none' }}>
                 <span style={{ fontSize: '0.9rem', color: '#334155', fontWeight: '500' }}>{book.title}</span>
-                <span style={{ fontSize: '0.8rem', background: '#eff6ff', color: '#2563eb', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
+                <span style={{ fontSize: '0.8rem', background: '#F5FAE8', color: 'var(--green)', padding: '2px 8px', borderRadius: '10px', fontWeight: 'bold' }}>
                   {book.count}x
                 </span>
               </li>

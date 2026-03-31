@@ -63,7 +63,7 @@ const logoImgStyle = {
 const brandNameStyle = {
   fontSize: '1.4rem',
   fontWeight: 'bold',
-  color: '#1e3a8a',
+  color: 'var(--maroon)',
   letterSpacing: '-0.5px'
 };
 

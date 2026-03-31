@@ -161,7 +161,7 @@ export default function Settings() {
             type="submit" 
             disabled={saving}
             style={{ 
-              padding: '12px 30px', background: 'var(--dark-blue)', color: 'white', border: 'none', 
+              padding: '12px 30px', background: 'var(--maroon)', color: 'white', border: 'none', 
               borderRadius: '6px', cursor: saving ? 'not-allowed' : 'pointer', fontSize: '1.1rem', fontWeight: 'bold' 
             }}
           >

@@ -106,7 +106,7 @@ export default function Home() {
                 </div>
               )}
               {content.vision && (
-                <div style={{ flex: 1, background: '#f8fafc', padding: '15px', borderRadius: '8px', borderLeft: '4px solid #f59e0b' }}>
+                <div style={{ flex: 1, background: '#FFFDE7', padding: '15px', borderRadius: '8px', borderLeft: '4px solid var(--yellow)' }}>
                   <strong style={{ color: 'var(--maroon)' }}>Vision:</strong>
                   <p style={{ fontSize: '0.9rem', margin: '5px 0 0 0', color: '#555' }}>{content.vision}</p>
                 </div>

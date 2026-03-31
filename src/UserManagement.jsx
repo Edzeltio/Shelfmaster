@@ -61,7 +61,7 @@ export default function UserManagement() {
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.03)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+            <thead style={{ background: '#F5FAE8', borderBottom: '2px solid #e2e8f0' }}>
               <tr>
                 <th style={{ padding: '15px 20px', color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase' }}>Student Name</th>
                 <th style={{ padding: '15px 20px', color: 'var(--text-muted)', fontSize: '0.85rem', textTransform: 'uppercase' }}>Student ID</th>
@@ -88,8 +88,8 @@ export default function UserManagement() {
                       <td style={{ padding: '15px 20px', color: '#475569' }}>{user.course_year}</td>
                       <td style={{ padding: '15px 20px' }}>
                         <span style={{ 
-                          background: activeLoans > 0 ? '#eff6ff' : '#f8fafc', 
-                          color: activeLoans > 0 ? 'var(--med-blue)' : '#94a3b8', 
+                          background: activeLoans > 0 ? '#F5FAE8' : '#f8fafc', 
+                          color: activeLoans > 0 ? 'var(--green)' : '#94a3b8', 
                           padding: '4px 10px', borderRadius: '4px', fontSize: '0.85rem', fontWeight: 'bold' 
                         }}>
                           {activeLoans} Books

@@ -101,7 +101,7 @@ export default function ProcessReturns() {
       </div>
 
       {/* SCANNER SECTION */}
-      <div style={{ background: 'white', padding: '3rem', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--med-blue)', marginBottom: '2rem', textAlign: 'center' }}>
+      <div style={{ background: 'white', padding: '3rem', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--green)', marginBottom: '2rem', textAlign: 'center' }}>
         
         <h2 style={{ color: '#334155', margin: '0 0 20px 0' }}>Ready to Scan</h2>
         
@@ -119,7 +119,7 @@ export default function ProcessReturns() {
           <button 
             type="submit" 
             disabled={processing || !barcode}
-            style={{ padding: '0 25px', background: 'var(--dark-blue)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer' }}
+            style={{ padding: '0 25px', background: 'var(--maroon)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer' }}
           >
             {processing ? '...' : 'Process'}
           </button>

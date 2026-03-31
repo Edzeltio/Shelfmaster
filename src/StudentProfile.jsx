@@ -63,20 +63,19 @@ export default function StudentProfile() {
   // Show loading while fetching
   if (loading) {
     return (
-      <div style={{ background: '#f8fafc', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: 'var(--cream)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p>Loading your profile...</p>
       </div>
     );
   }
 
   return (
-    <div style={{ background: '#f8fafc', minHeight: '100vh' }}>
-      {/* ✅ Now the navbar receives the REAL username from Supabase */}
+    <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <StudentNavbar userName={userData.fullName} />
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '40px 20px' }}>
         <div style={{ background: 'white', padding: '30px', borderRadius: '15px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-          <h2 style={{ color: '#1e3a8a', marginBottom: '20px' }}>Account Profile</h2>
+          <h2 style={{ color: 'var(--maroon)', marginBottom: '20px' }}>Account Profile</h2>
           <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '20px' }}>
             <p><strong>Name:</strong> {userData.fullName}</p>
             <p><strong>Student ID:</strong> {userData.studentId}</p>

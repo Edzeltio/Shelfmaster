@@ -8,7 +8,6 @@ export default function Inventory() {
   const [isEditing, setIsEditing] = useState(false);
   const [currentBookId, setCurrentBookId] = useState(null);
 
-  // 1. Define the default empty state
   const initialFormState = {
     accession_num: '',
     title: '',
@@ -35,7 +34,6 @@ export default function Inventory() {
   }, []);
 
   async function fetchInventory() {
-    // We only fetch books that are 'active'
     const { data, error } = await supabase
       .from('books')
       .select('*')
@@ -46,12 +44,9 @@ export default function Inventory() {
     else setBooks(data || []);
   }
 
-  // --- OPEN MODAL FOR ADDING ---
   const openAddModal = async () => {
-    console.log("Add button clicked"); // Debug check
     setIsEditing(false);
     
-    // Auto-generate next accession number
     const { data } = await supabase
       .from('books')
       .select('accession_num')
@@ -65,7 +60,6 @@ export default function Inventory() {
     setShowModal(true);
   };
 
-  // --- OPEN MODAL FOR EDITING ---
   const openEditModal = (book) => {
     setIsEditing(true);
     setCurrentBookId(book.id);
@@ -73,7 +67,6 @@ export default function Inventory() {
     setShowModal(true);
   };
 
-  // --- ARCHIVE LOGIC ---
   const handleArchive = async (book) => {
     const confirmed = window.confirm(`Archive "${book.title}"? It will be hidden from the catalog.`);
     if (confirmed) {
@@ -108,13 +101,12 @@ export default function Inventory() {
   };
 
   return (
-    <div style={{ padding: '30px', background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ padding: '30px', background: 'var(--cream)', minHeight: '100vh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
         <div>
-          <h2 style={{ color: '#1e3a8a', margin: 0 }}>Book Inventory</h2>
+          <h2 style={{ color: 'var(--maroon)', margin: 0 }}>Book Inventory</h2>
           <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Manage technical records and collection status.</p>
         </div>
-        {/* RE-FIXED BUTTON */}
         <button 
           onClick={openAddModal} 
           style={addBtnStyle}
@@ -126,7 +118,7 @@ export default function Inventory() {
       <div style={tableCardStyle}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ textAlign: 'left', background: '#f1f5f9', color: '#475569' }}>
+            <tr style={{ textAlign: 'left', background: '#F5FAE8', color: '#475569' }}>
               <th style={thStyle}>Acc #</th>
               <th style={thStyle}>Title</th>
               <th style={thStyle}>Author</th>
@@ -161,12 +153,12 @@ export default function Inventory() {
       {showModal && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
-            <h3 style={{ color: '#1e3a8a', marginBottom: '20px' }}>
+            <h3 style={{ color: 'var(--maroon)', marginBottom: '20px' }}>
               {isEditing ? 'Update Book Details' : 'Register New Book'}
             </h3>
             <form onSubmit={handleSaveBook}>
               <div style={formGridStyle}>
-                <div style={{ ...inputGroup, gridColumn: 'span 1', background: '#eff6ff', padding: '10px', borderRadius: '8px' }}>
+                <div style={{ ...inputGroup, gridColumn: 'span 1', background: '#F5FAE8', padding: '10px', borderRadius: '8px' }}>
                   <label style={labelStyle}>Accession # / Barcode</label>
                   <input 
                     type="text" 
@@ -215,12 +207,11 @@ export default function Inventory() {
   );
 }
 
-// --- STYLES ---
-const addBtnStyle = { background: '#2563eb', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', zIndex: 10, position: 'relative' };
+const addBtnStyle = { background: 'var(--green)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', zIndex: 10, position: 'relative' };
 const tableCardStyle = { background: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', overflow: 'hidden' };
 const thStyle = { padding: '15px' };
 const tdStyle = { padding: '15px', fontSize: '0.9rem' };
-const codeStyle = { background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px', fontFamily: 'monospace', color: '#1e3a8a', fontWeight: 'bold' };
+const codeStyle = { background: '#F5FAE8', padding: '4px 8px', borderRadius: '4px', fontFamily: 'monospace', color: 'var(--maroon)', fontWeight: 'bold' };
 const editBtnSmallStyle = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const archiveBtnStyle = { background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' };
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
@@ -230,5 +221,5 @@ const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
 const labelStyle = { fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b' };
 const inputStyle = { padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' };
 const modalFooter = { display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '30px' };
-const saveBtnStyle = { background: '#2563eb', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const saveBtnStyle = { background: 'var(--green)', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
 const cancelBtnStyle = { background: 'transparent', color: '#64748b', border: 'none', fontWeight: '600', cursor: 'pointer' };

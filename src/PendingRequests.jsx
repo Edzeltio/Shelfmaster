@@ -90,7 +90,7 @@ export default function PendingRequests() {
       ) : (
         <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.02)', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+            <thead style={{ background: '#F5FAE8', borderBottom: '2px solid #e2e8f0' }}>
               <tr>
                 <th style={{ padding: '15px 20px', color: '#475569' }}>Date Requested</th>
                 <th style={{ padding: '15px 20px', color: '#475569' }}>Patron Details</th>
@@ -116,15 +116,15 @@ export default function PendingRequests() {
                     <strong style={{ display: 'block' }}>{req.books?.title}</strong>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Barcode: {req.books?.barcode}</span>
                     <br/>
-                    <span style={{ fontSize: '0.8rem', color: req.books?.available_stock > 0 ? '#10b981' : '#ef4444' }}>
+                    <span style={{ fontSize: '0.8rem', color: req.books?.available_stock > 0 ? 'var(--green)' : '#ef4444' }}>
                       {req.books?.available_stock} in stock
                     </span>
                   </td>
 
                   <td style={{ padding: '15px 20px' }}>
                     <span style={{ 
-                      background: req.users?.role === 'teacher' ? '#fdf4ff' : '#eff6ff', 
-                      color: req.users?.role === 'teacher' ? '#c026d3' : '#2563eb', 
+                      background: req.users?.role === 'teacher' ? '#FFF0F5' : '#F5FAE8', 
+                      color: req.users?.role === 'teacher' ? 'var(--maroon)' : 'var(--green)', 
                       padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' 
                     }}>
                       {req.users?.role}
@@ -136,7 +136,7 @@ export default function PendingRequests() {
                       onClick={() => handleAction(req.id, 'borrowed', req.book_id, req.books?.available_stock, req.users?.role)}
                       disabled={req.books?.available_stock <= 0}
                       style={{ 
-                        padding: '8px 12px', background: req.books?.available_stock > 0 ? '#10b981' : '#9ca3af', 
+                        padding: '8px 12px', background: req.books?.available_stock > 0 ? 'var(--green)' : '#9ca3af', 
                         color: 'white', border: 'none', borderRadius: '4px', cursor: req.books?.available_stock > 0 ? 'pointer' : 'not-allowed', 
                         fontSize: '0.85rem', fontWeight: 'bold' 
                       }}

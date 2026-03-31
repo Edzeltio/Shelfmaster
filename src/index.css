@@ -11,6 +11,9 @@
   --text-main: #1e293b;    /* Slate-800 for primary text */
   --text-muted: #64748b;   /* Slate-500 for secondary text */
   --bg-main: #FAFFF0;      /* Light cream background */
+  /* Aliases used by components */
+  --dark-blue: #8C1010;    /* alias → maroon */
+  --med-blue: #7DB356;     /* alias → green */
 }
 
 * {

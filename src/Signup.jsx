@@ -95,11 +95,11 @@ export default function Signup() {
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
-              <div style={{ flex: 1, ...inputGroupStyle }}>
+              <div style={{ flex: 1, minWidth: 0, ...inputGroupStyle }}>
                 <label style={labelStyle}>Student ID</label>
                 <input type="text" name="student_id" placeholder="2024-0001" style={inputStyle} onChange={handleChange} required />
               </div>
-              <div style={{ flex: 1, ...inputGroupStyle }}>
+              <div style={{ flex: 1, minWidth: 0, ...inputGroupStyle }}>
                 <label style={labelStyle}>Course & Year</label>
                 <input type="text" name="course_year" placeholder="BSCpE-1" style={inputStyle} onChange={handleChange} required />
               </div>
@@ -196,7 +196,9 @@ const inputStyle = {
   border: '1px solid #e2e8f0',
   fontSize: '0.95rem',
   background: 'var(--cream)',
-  outline: 'none'
+  outline: 'none',
+  width: '100%',
+  boxSizing: 'border-box'
 };
 
 const buttonStyle = {

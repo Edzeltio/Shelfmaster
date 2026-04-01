@@ -21,13 +21,9 @@ export default function StudentNavbar() {
     // Fetch on mount
     supabase.auth.getUser().then(({ data: { user } }) => fetchUserName(user?.id));
 
-    // Re-fetch whenever session changes across tabs
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        setUserName('');
-      } else {
-        fetchUserName(session.user.id);
-      }
+    // Only clear the name if this tab signs out — ignore other tabs signing in
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') setUserName('');
     });
 
     return () => subscription.unsubscribe();

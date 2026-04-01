@@ -37,13 +37,10 @@ export default function StudentRoute({ children }) {
       checkRole(user?.id ?? null);
     });
 
-    // React to cross-tab session changes in real time
+    // Only redirect if this tab's own session is signed out
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
+      if (event === 'SIGNED_OUT') {
         navigate('/login', { replace: true });
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        setStatus('checking');
-        checkRole(session.user.id);
       }
     });
 

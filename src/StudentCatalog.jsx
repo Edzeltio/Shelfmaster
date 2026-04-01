@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import StudentNavbar from './StudentNavbar';
+import Toast from './Toast';
 
 export default function StudentCatalog() {
   const [books, setBooks] = useState([]);
@@ -9,6 +10,8 @@ export default function StudentCatalog() {
   const [sortBy, setSortBy] = useState('title-asc');
   const [loading, setLoading] = useState(true);
   const [addingId, setAddingId] = useState(null);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     fetchBooks();
@@ -25,33 +28,48 @@ export default function StudentCatalog() {
     setAddingId(book.id);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { alert('Please log in first.'); return; }
+      if (!user) { showToast('Please log in first.', 'warning'); return; }
+
+      // transactions.user_id is a FK to users.id (not auth.users.id)
+      const { data: userData, error: userErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('auth_id', user.id)
+        .single();
+
+      if (userErr || !userData) {
+        showToast('Could not identify your account. Try logging out and back in.', 'error');
+        return;
+      }
 
       const { data: existing } = await supabase
         .from('transactions')
         .select('id, status')
-        .eq('user_id', user.id)
+        .eq('user_id', userData.id)
         .eq('book_id', book.id)
         .in('status', ['pending', 'borrowed'])
         .maybeSingle();
 
       if (existing) {
-        alert(existing.status === 'borrowed'
-          ? 'You already have this book borrowed.'
-          : 'You already have a pending request for this book.');
+        showToast(
+          existing.status === 'borrowed'
+            ? 'You already have this book borrowed.'
+            : 'You already have a pending request for this book.',
+          'warning'
+        );
         return;
       }
 
       const { error } = await supabase.from('transactions').insert([{
-        user_id: user.id,
+        user_id: userData.id,
         book_id: book.id,
         status: 'pending',
       }]);
 
       if (error) throw error;
-      alert(`"${book.title}" has been added to your requests!`);
+      showToast(`"${book.title}" added to your requests!`, 'success');
     } catch (err) {
-      alert('Error: ' + err.message);
+      showToast(err.message || 'Something went wrong. Please try again.', 'error');
     } finally {
       setAddingId(null);
     }
@@ -81,6 +99,7 @@ export default function StudentCatalog() {
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
       <StudentNavbar />
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '40px 20px' }}>

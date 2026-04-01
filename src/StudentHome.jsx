@@ -13,13 +13,19 @@ export default function StudentHome() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const [nameRes, loansRes, pendingRes] = await Promise.all([
-        supabase.from('users').select('name').eq('auth_id', user.id).single(),
-        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'borrowed'),
-        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', user.id).eq('status', 'pending'),
+      // Get the users table id (transactions FK references users.id, not auth UUID)
+      const [nameRes] = await Promise.all([
+        supabase.from('users').select('id, name').eq('auth_id', user.id).single(),
+      ]);
+      if (nameRes.data?.name) setUserName(nameRes.data.name);
+      const usersId = nameRes.data?.id;
+      if (!usersId) { return; }
+
+      const [loansRes, pendingRes] = await Promise.all([
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'borrowed'),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'pending'),
       ]);
 
-      if (nameRes.data?.name) setUserName(nameRes.data.name);
       setStats({
         loans: loansRes.count ?? 0,
         pending: pendingRes.count ?? 0,

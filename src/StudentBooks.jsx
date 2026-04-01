@@ -17,16 +17,22 @@ export default function StudentBooks() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
+    // transactions.user_id is a FK to users.id (the users table PK, not auth UUID)
+    const { data: userData } = await supabase
+      .from('users').select('id').eq('auth_id', user.id).single();
+    const userId = userData?.id;
+    if (!userId) { setLoading(false); return; }
+
     const [loansRes, requestsRes] = await Promise.all([
       supabase
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'borrowed'),
       supabase
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
-        .eq('user_id', user.id)
+        .eq('user_id', userId)
         .eq('status', 'pending'),
     ]);
 

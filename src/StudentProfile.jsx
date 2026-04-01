@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import StudentNavbar from './StudentNavbar';
 import { supabase } from './supabaseClient';
+import Toast from './Toast';
 
 export default function StudentProfile() {
   const [userData, setUserData] = useState(null);
@@ -9,6 +10,8 @@ export default function StudentProfile() {
   const [form, setForm] = useState({ name: '', student_id: '', course_year: '' });
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => { fetchUserProfile(); }, []);
 

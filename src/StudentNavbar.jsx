@@ -38,7 +38,7 @@ export default function StudentNavbar() {
         <Link to="/student/dashboard" style={linkStyle}>Home</Link>
         <Link to="/student/catalog" style={linkStyle}>Catalog</Link>
         <Link to="/student/books" style={linkStyle}>My Books</Link>
-        <Link to="/student/cart" style={linkStyle}>Cart</Link>
+        <Link to="/student/profile" style={linkStyle}>Profile</Link>
         
         <div style={userSectionStyle}>
           {userName && <span style={userNameStyle}>{userName}</span>}

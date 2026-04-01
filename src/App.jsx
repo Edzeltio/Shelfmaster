@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 
 // Public Pages
 import Home from './Home';
@@ -9,7 +9,6 @@ import Signup from './Signup';
 // Student Pages
 import StudentHome from './StudentHome';
 import StudentCatalog from './StudentCatalog';
-import StudentCart from './StudentCart';
 import StudentBooks from './StudentBooks';
 import StudentProfile from './StudentProfile'
 
@@ -36,7 +35,7 @@ export default function App() {
         {/* 2. STUDENT ROUTES */}
         <Route path="/student/home" element={<StudentHome />} />
         <Route path="/student/catalog" element={<StudentCatalog />} />
-        <Route path="/student/cart" element={<StudentCart />} />
+        <Route path="/student/cart" element={<Navigate to="/student/books" replace />} />
         <Route path="/student/books" element={<StudentBooks />} />
         <Route path="/student/profile" element={<StudentProfile />} />
         <Route path="/student/dashboard" element={<StudentHome />} />

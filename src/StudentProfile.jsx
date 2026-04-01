@@ -10,9 +10,7 @@ export default function StudentProfile() {
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
-  useEffect(() => {
-    fetchUserProfile();
-  }, []);
+  useEffect(() => { fetchUserProfile(); }, []);
 
   async function fetchUserProfile() {
     setLoading(true);
@@ -28,17 +26,13 @@ export default function StudentProfile() {
     if (!error && data) {
       setUserData({ ...data, email: data.email || user.email });
     } else {
-      setUserData({ name: user.email?.split('@')[0] || 'Student', email: user.email, student_id: '—', course_year: '—', role: 'student', status: 'active' });
+      setUserData({ name: user.email?.split('@')[0] || 'Student', email: user.email, student_id: '', course_year: '', role: 'student', status: 'active' });
     }
     setLoading(false);
   }
 
   function openEditModal() {
-    setForm({
-      name: userData?.name || '',
-      student_id: userData?.student_id || '',
-      course_year: userData?.course_year || '',
-    });
+    setForm({ name: userData?.name || '', student_id: userData?.student_id || '', course_year: userData?.course_year || '' });
     setSaveMsg('');
     setShowModal(true);
   }
@@ -47,7 +41,6 @@ export default function StudentProfile() {
     e.preventDefault();
     setSaving(true);
     setSaveMsg('');
-
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
@@ -57,11 +50,11 @@ export default function StudentProfile() {
       .eq('auth_id', user.id);
 
     if (error) {
-      setSaveMsg('Error saving changes: ' + error.message);
+      setSaveMsg('Error: ' + error.message);
     } else {
-      setUserData(prev => ({ ...prev, name: form.name, student_id: form.student_id, course_year: form.course_year }));
-      setSaveMsg('✅ Profile updated successfully!');
-      setTimeout(() => { setShowModal(false); setSaveMsg(''); }, 1200);
+      setUserData(prev => ({ ...prev, ...form }));
+      setSaveMsg('success');
+      setTimeout(() => { setShowModal(false); setSaveMsg(''); }, 1000);
     }
     setSaving(false);
   }
@@ -69,100 +62,89 @@ export default function StudentProfile() {
   if (loading) {
     return (
       <div style={{ background: 'var(--cream)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: '#64748b' }}>Loading your profile...</p>
+        <p style={{ color: '#94a3b8' }}>Loading profile...</p>
       </div>
     );
   }
+
+  const initials = (userData?.name || 'S').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const isActive = (userData?.status || 'active') === 'active';
 
   return (
     <div style={{ background: 'var(--cream)', minHeight: '100vh' }}>
       <StudentNavbar />
 
-      <div style={{ maxWidth: '620px', margin: '0 auto', padding: '40px 20px' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 24px' }}>
 
-        {/* Profile Card */}
-        <div style={{ background: 'white', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.07)' }}>
-          {/* Top banner */}
-          <div style={{ background: 'var(--maroon)', height: '90px', position: 'relative' }} />
+        {/* ── Top Card ── */}
+        <div style={topCardStyle}>
+          {/* Banner */}
+          <div style={bannerStyle} />
 
-          {/* Avatar */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '-44px', padding: '0 30px 30px' }}>
-            <div style={avatarStyle}>
-              {(userData?.name || 'S').charAt(0).toUpperCase()}
-            </div>
-
-            <h2 style={{ margin: '14px 0 2px', color: '#1e293b', fontSize: '1.3rem' }}>{userData?.name || 'Student'}</h2>
-            <p style={{ margin: '0 0 6px', color: '#64748b', fontSize: '0.9rem' }}>{userData?.email || '—'}</p>
-            <span style={roleBadgeStyle}>{userData?.role?.toUpperCase() || 'STUDENT'}</span>
-
-            <div style={{ borderTop: '1px solid #f1f5f9', width: '100%', marginTop: '24px', paddingTop: '24px' }}>
-              <InfoRow label="Student ID" value={userData?.student_id || '—'} />
-              <InfoRow label="Course & Year" value={userData?.course_year || '—'} />
-              <InfoRow label="Account Status" value={
-                <span style={{ color: userData?.status === 'active' ? 'var(--green)' : '#ef4444', fontWeight: '600', textTransform: 'capitalize' }}>
-                  {userData?.status || 'active'}
-                </span>
-              } />
-            </div>
-
-            <button onClick={openEditModal} style={editBtnStyle}>
-              ✏️ Edit Profile
-            </button>
+          {/* Avatar row */}
+          <div style={avatarRowStyle}>
+            <div style={avatarStyle}>{initials}</div>
+            <button onClick={openEditModal} style={editBtnStyle}>✏️ Edit Profile</button>
           </div>
+
+          {/* Name + meta */}
+          <div style={{ padding: '0 32px 28px' }}>
+            <h2 style={{ margin: '0 0 4px', fontSize: '1.6rem', color: '#1e293b' }}>
+              {userData?.name || 'Student'}
+            </h2>
+            <p style={{ margin: '0 0 10px', color: '#64748b', fontSize: '0.92rem' }}>
+              {userData?.email || '—'}
+            </p>
+            <span style={rolePillStyle}>{(userData?.role || 'student').toUpperCase()}</span>
+          </div>
+        </div>
+
+        {/* ── Info Grid ── */}
+        <div style={infoGridStyle}>
+          <InfoCard icon="🪪" label="Student ID" value={userData?.student_id || '—'} />
+          <InfoCard icon="🎓" label="Course & Year" value={userData?.course_year || '—'} />
+          <InfoCard
+            icon={isActive ? '✅' : '🚫'}
+            label="Account Status"
+            value={
+              <span style={{ color: isActive ? 'var(--green)' : '#ef4444', fontWeight: 700, textTransform: 'capitalize' }}>
+                {userData?.status || 'Active'}
+              </span>
+            }
+          />
         </div>
       </div>
 
-      {/* Edit Modal */}
+      {/* ── Edit Modal ── */}
       {showModal && (
         <div style={overlayStyle} onClick={() => setShowModal(false)}>
           <div style={modalStyle} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '22px' }}>
-              <h3 style={{ margin: 0, color: 'var(--maroon)' }}>Edit Profile</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div>
+                <h3 style={{ margin: '0 0 2px', color: 'var(--maroon)', fontSize: '1.15rem' }}>Edit Profile</h3>
+                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.82rem' }}>Update your personal information</p>
+              </div>
               <button onClick={() => setShowModal(false)} style={closeBtnStyle}>✕</button>
             </div>
 
             <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Full Name</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                  style={inputStyle}
-                  placeholder="Your full name"
-                  required
-                />
-              </div>
+              <Field label="Full Name" placeholder="Your full name" value={form.name}
+                onChange={v => setForm(p => ({ ...p, name: v }))} required />
+              <Field label="Student ID" placeholder="e.g. 2024-0001" value={form.student_id}
+                onChange={v => setForm(p => ({ ...p, student_id: v }))} />
+              <Field label="Course & Year" placeholder="e.g. BSCS-2" value={form.course_year}
+                onChange={v => setForm(p => ({ ...p, course_year: v }))} />
 
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Student ID</label>
-                <input
-                  type="text"
-                  value={form.student_id}
-                  onChange={e => setForm(p => ({ ...p, student_id: e.target.value }))}
-                  style={inputStyle}
-                  placeholder="e.g. 2024-0001"
-                />
-              </div>
-
-              <div style={fieldStyle}>
-                <label style={labelStyle}>Course & Year</label>
-                <input
-                  type="text"
-                  value={form.course_year}
-                  onChange={e => setForm(p => ({ ...p, course_year: e.target.value }))}
-                  style={inputStyle}
-                  placeholder="e.g. BSCS-2"
-                />
-              </div>
-
-              {saveMsg && (
-                <p style={{ margin: 0, fontSize: '0.88rem', color: saveMsg.startsWith('✅') ? 'var(--green)' : '#ef4444', textAlign: 'center' }}>
-                  {saveMsg}
+              {saveMsg && saveMsg !== 'success' && (
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#ef4444', textAlign: 'center' }}>{saveMsg}</p>
+              )}
+              {saveMsg === 'success' && (
+                <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--green)', textAlign: 'center', fontWeight: 600 }}>
+                  ✅ Saved successfully!
                 </p>
               )}
 
-              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
                 <button type="button" onClick={() => setShowModal(false)} style={cancelBtnStyle}>Cancel</button>
                 <button type="submit" disabled={saving} style={saveBtnStyle}>
                   {saving ? 'Saving...' : 'Save Changes'}
@@ -176,56 +158,123 @@ export default function StudentProfile() {
   );
 }
 
-function InfoRow({ label, value }) {
+function InfoCard({ icon, label, value }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #f8fafc' }}>
-      <span style={{ color: '#94a3b8', fontSize: '0.88rem', fontWeight: '600' }}>{label}</span>
-      <span style={{ color: '#1e293b', fontWeight: '500', fontSize: '0.95rem' }}>{value}</span>
+    <div style={infoCardStyle}>
+      <div style={{ fontSize: '1.6rem', marginBottom: '10px' }}>{icon}</div>
+      <div style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '6px' }}>{label}</div>
+      <div style={{ fontSize: '1.05rem', color: '#1e293b', fontWeight: 600 }}>{value}</div>
     </div>
   );
 }
 
+function Field({ label, placeholder, value, onChange, required }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569' }}>{label}</label>
+      <input
+        type="text"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        required={required}
+        style={{
+          padding: '11px 14px',
+          borderRadius: '9px',
+          border: '1.5px solid #e2e8f0',
+          fontSize: '0.95rem',
+          background: 'var(--cream)',
+          outline: 'none',
+          width: '100%',
+          boxSizing: 'border-box',
+          transition: 'border-color 0.2s',
+        }}
+        onFocus={e => (e.target.style.borderColor = 'var(--maroon)')}
+        onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
+      />
+    </div>
+  );
+}
+
+/* ─── Styles ─── */
+const topCardStyle = {
+  background: 'white',
+  borderRadius: '18px',
+  overflow: 'hidden',
+  boxShadow: '0 4px 24px rgba(0,0,0,0.07)',
+  marginBottom: '24px',
+};
+
+const bannerStyle = {
+  height: '120px',
+  background: 'linear-gradient(135deg, var(--maroon) 0%, #b91c1c 100%)',
+};
+
+const avatarRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-end',
+  padding: '0 32px',
+  marginTop: '-50px',
+  marginBottom: '16px',
+};
+
 const avatarStyle = {
-  width: '88px',
-  height: '88px',
+  width: '96px',
+  height: '96px',
   borderRadius: '50%',
   background: 'var(--maroon)',
   color: 'white',
-  fontSize: '2.2rem',
-  fontWeight: 'bold',
+  fontSize: '2rem',
+  fontWeight: 700,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   border: '4px solid white',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-};
-
-const roleBadgeStyle = {
-  background: '#F5FAE8',
-  color: 'var(--green)',
-  fontSize: '0.72rem',
-  fontWeight: 'bold',
-  padding: '4px 14px',
-  borderRadius: '20px',
-  letterSpacing: '0.5px',
+  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+  flexShrink: 0,
 };
 
 const editBtnStyle = {
-  marginTop: '22px',
   background: 'var(--maroon)',
   color: 'white',
   border: 'none',
-  padding: '10px 26px',
+  padding: '9px 20px',
   borderRadius: '10px',
-  fontWeight: 'bold',
-  fontSize: '0.95rem',
+  fontWeight: 700,
+  fontSize: '0.9rem',
   cursor: 'pointer',
+  marginBottom: '4px',
+};
+
+const rolePillStyle = {
+  display: 'inline-block',
+  background: '#F5FAE8',
+  color: 'var(--green)',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  padding: '4px 14px',
+  borderRadius: '20px',
+  letterSpacing: '0.6px',
+};
+
+const infoGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '16px',
+};
+
+const infoCardStyle = {
+  background: 'white',
+  borderRadius: '14px',
+  padding: '24px',
+  boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
 };
 
 const overlayStyle = {
   position: 'fixed',
   inset: 0,
-  background: 'rgba(0,0,0,0.45)',
+  background: 'rgba(15,23,42,0.5)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -235,45 +284,37 @@ const overlayStyle = {
 
 const modalStyle = {
   background: 'white',
-  borderRadius: '16px',
-  padding: '30px',
+  borderRadius: '18px',
+  padding: '32px',
   width: '100%',
-  maxWidth: '420px',
-  boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+  maxWidth: '440px',
+  boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
 };
 
 const closeBtnStyle = {
-  background: 'none',
+  background: '#f1f5f9',
   border: 'none',
-  fontSize: '1.1rem',
-  cursor: 'pointer',
-  color: '#94a3b8',
-  padding: '4px 8px',
-  borderRadius: '6px',
-};
-
-const fieldStyle = { display: 'flex', flexDirection: 'column', gap: '6px' };
-const labelStyle = { fontSize: '0.82rem', fontWeight: '700', color: '#475569' };
-const inputStyle = {
-  padding: '11px 14px',
-  borderRadius: '9px',
-  border: '1px solid #e2e8f0',
+  width: '32px',
+  height: '32px',
+  borderRadius: '8px',
   fontSize: '0.95rem',
-  background: '#fafff0',
-  outline: 'none',
-  width: '100%',
-  boxSizing: 'border-box',
+  cursor: 'pointer',
+  color: '#64748b',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
 const cancelBtnStyle = {
   flex: 1,
   padding: '11px',
   borderRadius: '9px',
-  border: '1px solid #e2e8f0',
+  border: '1.5px solid #e2e8f0',
   background: 'white',
-  fontWeight: '600',
+  fontWeight: 600,
   cursor: 'pointer',
-  fontSize: '0.9rem',
+  fontSize: '0.92rem',
+  color: '#475569',
 };
 
 const saveBtnStyle = {
@@ -283,7 +324,7 @@ const saveBtnStyle = {
   border: 'none',
   background: 'var(--maroon)',
   color: 'white',
-  fontWeight: '700',
+  fontWeight: 700,
   cursor: 'pointer',
-  fontSize: '0.9rem',
+  fontSize: '0.92rem',
 };

@@ -37,14 +37,11 @@ export default function StudentRoute({ children }) {
       checkRole(user?.id ?? null);
     });
 
-    // Only redirect if this tab's own session is signed out
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        navigate('/login', { replace: true });
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    // No cross-tab auth listener here — student logout is handled explicitly
+    // by the Logout button in StudentNavbar which calls signOut() then navigates.
+    // Listening to SIGNED_OUT here would cause student to be kicked out whenever
+    // the librarian (or anyone else) logs out on another tab.
+    return () => {};
   }, [navigate]);
 
   if (status === 'checking') {

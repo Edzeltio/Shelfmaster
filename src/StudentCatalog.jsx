@@ -57,27 +57,25 @@ export default function StudentCatalog() {
     }
   };
 
-  const categories = ['All', ...new Set(books.map(b => b.category || 'General').filter(Boolean))].sort();
+  const getCategory = (book) => book.category || book.subject_class || 'General';
+
+  const categories = ['All', ...new Set(books.map(getCategory))].sort();
 
   const filteredBooks = books
     .filter(book => {
       const s = searchTerm.toLowerCase();
+      const cat = getCategory(book);
       const matchSearch =
         book.title?.toLowerCase().includes(s) ||
         book.authors?.toLowerCase().includes(s) ||
-        (book.category || 'General').toLowerCase().includes(s);
-      const matchCategory =
-        categoryFilter === 'All' || (book.category || 'General') === categoryFilter;
+        cat.toLowerCase().includes(s);
+      const matchCategory = categoryFilter === 'All' || cat === categoryFilter;
       return matchSearch && matchCategory;
     })
     .sort((a, b) => {
       if (sortBy === 'title-asc') return (a.title || '').localeCompare(b.title || '');
       if (sortBy === 'title-desc') return (b.title || '').localeCompare(a.title || '');
-      if (sortBy === 'available') {
-        const aStock = a.available_stock ?? a.stock ?? 0;
-        const bStock = b.available_stock ?? b.stock ?? 0;
-        return bStock - aStock;
-      }
+      if (sortBy === 'available') return (b.quantity ?? 0) - (a.quantity ?? 0);
       return 0;
     });
 
@@ -141,16 +139,16 @@ export default function StudentCatalog() {
             <div style={gridStyle}>
               {filteredBooks.length > 0 ? (
                 filteredBooks.map(book => {
-                  const stock = book.available_stock ?? book.stock ?? 0;
-                  const isAvailable = stock > 0;
+                  const qty = book.quantity ?? 0;
+                  const isAvailable = qty > 0;
                   return (
                     <div key={book.id} style={cardStyle}>
-                      <div style={categoryBadgeStyle}>{book.category || 'General'}</div>
+                      <div style={categoryBadgeStyle}>{getCategory(book)}</div>
                       <h3 style={bookTitleStyle}>{book.title}</h3>
                       <p style={authorStyle}>by {book.authors}</p>
                       <div style={footerStyle}>
                         <span style={{ fontSize: '0.82rem', fontWeight: '600', color: isAvailable ? 'var(--green)' : '#ef4444' }}>
-                          {isAvailable ? `✅ ${stock} Available` : '❌ Out of Stock'}
+                          {isAvailable ? `✅ ${qty} Available` : '❌ Out of Stock'}
                         </span>
                         <button
                           disabled={!isAvailable || addingId === book.id}

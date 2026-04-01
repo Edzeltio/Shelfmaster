@@ -7,6 +7,7 @@ import Login from './Login';
 import Signup from './Signup';
 
 // Student Pages
+import StudentRoute from './StudentRoute';
 import StudentHome from './StudentHome';
 import StudentCatalog from './StudentCatalog';
 import StudentBooks from './StudentBooks';
@@ -32,13 +33,13 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* 2. STUDENT ROUTES */}
-        <Route path="/student/home" element={<StudentHome />} />
-        <Route path="/student/catalog" element={<StudentCatalog />} />
-        <Route path="/student/cart" element={<Navigate to="/student/books" replace />} />
-        <Route path="/student/books" element={<StudentBooks />} />
-        <Route path="/student/profile" element={<StudentProfile />} />
-        <Route path="/student/dashboard" element={<StudentHome />} />
+        {/* 2. STUDENT ROUTES — wrapped in StudentRoute to enforce role + cross-tab session safety */}
+        <Route path="/student/home"      element={<StudentRoute><StudentHome /></StudentRoute>} />
+        <Route path="/student/dashboard" element={<StudentRoute><StudentHome /></StudentRoute>} />
+        <Route path="/student/catalog"   element={<StudentRoute><StudentCatalog /></StudentRoute>} />
+        <Route path="/student/cart"      element={<Navigate to="/student/books" replace />} />
+        <Route path="/student/books"     element={<StudentRoute><StudentBooks /></StudentRoute>} />
+        <Route path="/student/profile"   element={<StudentRoute><StudentProfile /></StudentRoute>} />
 
         {/* 3. LIBRARIAN ROUTES (Nested inside LibrarianLayout) */}
         <Route path="/librarian" element={<LibrarianLayout />}>

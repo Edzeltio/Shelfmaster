@@ -17,24 +17,16 @@ export default function StudentBooks() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data: userData } = await supabase
-      .from('users')
-      .select('id')
-      .eq('auth_id', user.id)
-      .single();
-
-    const userId = userData?.id ?? user.id;
-
     const [loansRes, requestsRes] = await Promise.all([
       supabase
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .eq('status', 'borrowed'),
       supabase
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
-        .eq('user_id', userId)
+        .eq('user_id', user.id)
         .eq('status', 'pending'),
     ]);
 
@@ -166,7 +158,9 @@ const tabStyle = {
   fontWeight: '600',
   color: '#94a3b8',
   cursor: 'pointer',
-  borderBottom: '3px solid transparent',
+  borderBottomWidth: '3px',
+  borderBottomStyle: 'solid',
+  borderBottomColor: 'transparent',
   marginBottom: '-2px',
   display: 'flex',
   alignItems: 'center',

@@ -8,18 +8,29 @@ export default function StudentNavbar() {
   const [userName, setUserName] = useState('');
 
   useEffect(() => {
-    async function fetchUserName() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from('users')
-          .select('name')
-          .eq('auth_id', user.id)
-          .single();
-        if (data?.name) setUserName(data.name);
-      }
+    async function fetchUserName(userId) {
+      if (!userId) { setUserName(''); return; }
+      const { data } = await supabase
+        .from('users')
+        .select('name')
+        .eq('auth_id', userId)
+        .single();
+      setUserName(data?.name || '');
     }
-    fetchUserName();
+
+    // Fetch on mount
+    supabase.auth.getUser().then(({ data: { user } }) => fetchUserName(user?.id));
+
+    // Re-fetch whenever session changes across tabs
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        setUserName('');
+      } else {
+        fetchUserName(session.user.id);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleLogout = async () => {

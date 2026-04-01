@@ -27,18 +27,10 @@ export default function StudentCatalog() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { alert('Please log in first.'); return; }
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('id')
-        .eq('auth_id', user.id)
-        .single();
-
-      if (!userData) { alert('User not found.'); return; }
-
       const { data: existing } = await supabase
         .from('transactions')
         .select('id, status')
-        .eq('user_id', userData.id)
+        .eq('user_id', user.id)
         .eq('book_id', book.id)
         .in('status', ['pending', 'borrowed'])
         .maybeSingle();
@@ -51,7 +43,7 @@ export default function StudentCatalog() {
       }
 
       const { error } = await supabase.from('transactions').insert([{
-        user_id: userData.id,
+        user_id: user.id,
         book_id: book.id,
         status: 'pending',
       }]);

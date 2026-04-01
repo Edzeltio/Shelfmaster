@@ -44,15 +44,23 @@ export default function StudentProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
-    const { error } = await supabase
+    const { data: saved, error } = await supabase
       .from('users')
       .update({ name: form.name, student_id: form.student_id, course_year: form.course_year })
-      .eq('auth_id', user.id);
+      .eq('auth_id', user.id)
+      .select('name, student_id, course_year')
+      .single();
 
     if (error) {
+      console.error('Profile update error:', error);
       setSaveMsg('Error: ' + error.message);
+    } else if (!saved) {
+      // Update ran but returned nothing — likely blocked by a database permission policy
+      console.warn('Profile update: no rows returned. Check the UPDATE policy on the users table in Supabase.');
+      setSaveMsg('⚠️ Save failed: the database did not accept the change. Ask your admin to enable UPDATE access on the users table.');
     } else {
-      setUserData(prev => ({ ...prev, ...form }));
+      // Confirmed: database returned the updated row
+      setUserData(prev => ({ ...prev, name: saved.name, student_id: saved.student_id, course_year: saved.course_year }));
       setSaveMsg('success');
       setTimeout(() => { setShowModal(false); setSaveMsg(''); }, 1000);
     }

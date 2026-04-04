@@ -47,23 +47,38 @@ export default function PendingRequests() {
         ? (isTeacher ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
         : null;
 
-      const { error: transError } = await supabase
+      const { data: updatedTrans, error: transError } = await supabase
         .from('transactions')
         .update({
           status: newStatus,
           borrow_date: newStatus === 'borrowed' ? new Date().toISOString() : null,
           due_date: dueDate
         })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .select();
 
       if (transError) throw transError;
 
+      if (!updatedTrans || updatedTrans.length === 0) {
+        throw new Error(
+          'The database rejected this update. Please check that the transactions table has an UPDATE policy enabled for librarians in Supabase.'
+        );
+      }
+
       if (newStatus === 'borrowed') {
-        const { error: stockError } = await supabase
+        const { data: updatedBook, error: stockError } = await supabase
           .from('books')
           .update({ quantity: currentStock - 1 })
-          .eq('id', bookId);
+          .eq('id', bookId)
+          .select();
+
         if (stockError) throw stockError;
+
+        if (!updatedBook || updatedBook.length === 0) {
+          throw new Error(
+            'Transaction approved but stock could not be updated. Check the UPDATE policy on the books table in Supabase.'
+          );
+        }
       }
 
       showToast(
@@ -76,8 +91,8 @@ export default function PendingRequests() {
       fetchPendingRequests();
 
     } catch (error) {
-      console.error(error);
-      showToast('Error processing request: ' + error.message, 'error');
+      console.error('handleAction error:', error);
+      showToast('Error: ' + error.message, 'error');
     }
   };
 

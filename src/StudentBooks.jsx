@@ -18,8 +18,9 @@ export default function StudentBooks() {
     if (!user) { setLoading(false); return; }
 
     // transactions.user_id is a FK to users.id (the users table PK, not auth UUID)
-    const { data: userData } = await supabase
-      .from('users').select('id').eq('auth_id', user.id).single();
+    const { data: userData, error: userError } = await supabase
+      .from('users').select('id').eq('auth_id', user.id).maybeSingle();
+    if (userError) console.error('User lookup error:', userError);
     const userId = userData?.id;
     if (!userId) { setLoading(false); return; }
 
@@ -36,6 +37,8 @@ export default function StudentBooks() {
         .eq('status', 'pending'),
     ]);
 
+    if (loansRes.error) console.error('Loans fetch error:', loansRes.error);
+    if (requestsRes.error) console.error('Requests fetch error:', requestsRes.error);
     if (!loansRes.error) setLoans(loansRes.data || []);
     if (!requestsRes.error) setRequests(requestsRes.data || []);
     setLoading(false);

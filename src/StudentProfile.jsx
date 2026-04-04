@@ -22,7 +22,7 @@ export default function StudentProfile() {
 
     const { data, error } = await supabase
       .from('users')
-      .select('name, student_id, course_year, role, status, email')
+      .select('name, student_id, course_year, role, status')
       .eq('auth_id', user.id)
       .maybeSingle();
 
@@ -31,7 +31,7 @@ export default function StudentProfile() {
     }
 
     if (data) {
-      setUserData({ ...data, email: data.email || user.email });
+      setUserData({ ...data, email: user.email });
     } else {
       setUserData({ name: user.email?.split('@')[0] || 'Student', email: user.email, student_id: '', course_year: '', role: 'student', status: 'active' });
     }

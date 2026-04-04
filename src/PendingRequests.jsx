@@ -21,7 +21,7 @@ export default function PendingRequests() {
         user_id,
         book_id,
         users (name, student_id, role),
-        books (title, barcode, available_stock)
+        books (title, barcode, quantity)
       `)
       .eq('status', 'pending')
       .order('created_at', { ascending: true }); // Oldest requests first
@@ -55,7 +55,7 @@ export default function PendingRequests() {
       if (newStatus === 'borrowed') {
         const { error: stockError } = await supabase
           .from('books')
-          .update({ available_stock: currentStock - 1 })
+          .update({ quantity: currentStock - 1 })
           .eq('id', bookId);
         
         if (stockError) throw stockError;
@@ -116,8 +116,8 @@ export default function PendingRequests() {
                     <strong style={{ display: 'block' }}>{req.books?.title}</strong>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Barcode: {req.books?.barcode}</span>
                     <br/>
-                    <span style={{ fontSize: '0.8rem', color: req.books?.available_stock > 0 ? 'var(--green)' : '#ef4444' }}>
-                      {req.books?.available_stock} in stock
+                    <span style={{ fontSize: '0.8rem', color: req.books?.quantity > 0 ? 'var(--green)' : '#ef4444' }}>
+                      {req.books?.quantity ?? 0} in stock
                     </span>
                   </td>
 
@@ -133,18 +133,18 @@ export default function PendingRequests() {
 
                   <td style={{ padding: '15px 20px', display: 'flex', gap: '10px' }}>
                     <button 
-                      onClick={() => handleAction(req.id, 'borrowed', req.book_id, req.books?.available_stock, req.users?.role)}
-                      disabled={req.books?.available_stock <= 0}
+                      onClick={() => handleAction(req.id, 'borrowed', req.book_id, req.books?.quantity, req.users?.role)}
+                      disabled={req.books?.quantity <= 0}
                       style={{ 
-                        padding: '8px 12px', background: req.books?.available_stock > 0 ? 'var(--green)' : '#9ca3af', 
-                        color: 'white', border: 'none', borderRadius: '4px', cursor: req.books?.available_stock > 0 ? 'pointer' : 'not-allowed', 
+                        padding: '8px 12px', background: req.books?.quantity > 0 ? 'var(--green)' : '#9ca3af', 
+                        color: 'white', border: 'none', borderRadius: '4px', cursor: req.books?.quantity > 0 ? 'pointer' : 'not-allowed', 
                         fontSize: '0.85rem', fontWeight: 'bold' 
                       }}
                     >
                       Approve
                     </button>
                     <button 
-                      onClick={() => handleAction(req.id, 'archived', req.book_id, req.books?.available_stock, req.users?.role)}
+                      onClick={() => handleAction(req.id, 'archived', req.book_id, req.books?.quantity, req.users?.role)}
                       style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
                     >
                       Decline

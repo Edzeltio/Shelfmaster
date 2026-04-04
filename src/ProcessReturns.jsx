@@ -43,7 +43,7 @@ export default function ProcessReturns() {
       // 1. Find the book using the scanned barcode
       const { data: book, error: bookError } = await supabase
         .from('books')
-        .select('id, title, available_stock')
+        .select('id, title, quantity')
         .eq('barcode', barcode.trim())
         .single();
 
@@ -73,7 +73,7 @@ export default function ProcessReturns() {
       // 4. Put the book back on the shelf (increment stock)
       const { error: updateBookError } = await supabase
         .from('books')
-        .update({ available_stock: book.available_stock + 1 })
+        .update({ quantity: book.quantity + 1 })
         .eq('id', book.id);
 
       if (updateBookError) throw updateBookError;

@@ -24,9 +24,13 @@ export default function StudentProfile() {
       .from('users')
       .select('name, student_id, course_year, role, status, email')
       .eq('auth_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (!error && data) {
+    if (error) {
+      console.error('Profile fetch error:', error);
+    }
+
+    if (data) {
       setUserData({ ...data, email: data.email || user.email });
     } else {
       setUserData({ name: user.email?.split('@')[0] || 'Student', email: user.email, student_id: '', course_year: '', role: 'student', status: 'active' });
@@ -52,7 +56,7 @@ export default function StudentProfile() {
       .update({ name: form.name, student_id: form.student_id, course_year: form.course_year })
       .eq('auth_id', user.id)
       .select('name, student_id, course_year')
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Profile update error:', error);

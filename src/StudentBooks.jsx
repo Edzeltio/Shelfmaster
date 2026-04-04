@@ -32,7 +32,7 @@ export default function StudentBooks() {
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
         .eq('user_id', userId)
-        .eq('status', 'borrowed'),
+        .eq('status', 'approved'),
       supabase
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')

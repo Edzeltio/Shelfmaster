@@ -77,7 +77,7 @@ export default function UserManagement() {
                 </tr>
               ) : (
                 filteredUsers.map(user => {
-                  const activeLoans = user.transactions?.filter(t => t.status === 'borrowed').length || 0;
+                  const activeLoans = user.transactions?.filter(t => t.status === 'approved').length || 0;
                   
                   return (
                     <tr key={user.id} style={{ borderBottom: '1px solid #f1f5f9' }}>

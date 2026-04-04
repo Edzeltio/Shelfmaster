@@ -18,7 +18,7 @@ export default function LibrarianDashboard() {
     setLoading(true);
     
     const { count: books } = await supabase.from('books').select('*', { count: 'exact', head: true });
-    const { count: loans } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed');
+    const { count: loans } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'approved');
     const { count: pending } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending');
 
     setStats({ totalBooks: books || 0, activeLoans: loans || 0, pending: pending || 0 });

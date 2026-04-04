@@ -51,7 +51,7 @@ export default function ProcessReturns() {
         .from('transactions')
         .select('id, user_id, users(name)')
         .eq('book_id', book.id)
-        .eq('status', 'borrowed')
+        .eq('status', 'approved')
         .single();
 
       if (transError || !transaction) throw new Error(`"${book.title}" is not currently marked as borrowed.`);

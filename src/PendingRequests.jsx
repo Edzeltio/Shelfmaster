@@ -43,7 +43,7 @@ export default function PendingRequests() {
   const handleAction = async (transactionId, newStatus, bookId, currentStock, userRole) => {
     try {
       const isTeacher = userRole === 'teacher';
-      const dueDate = newStatus === 'borrowed'
+      const dueDate = newStatus === 'approved'
         ? (isTeacher ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
         : null;
 
@@ -51,7 +51,7 @@ export default function PendingRequests() {
         .from('transactions')
         .update({
           status: newStatus,
-          borrow_date: newStatus === 'borrowed' ? new Date().toISOString() : null,
+          borrow_date: newStatus === 'approved' ? new Date().toISOString() : null,
           due_date: dueDate
         })
         .eq('id', transactionId)
@@ -65,7 +65,7 @@ export default function PendingRequests() {
         );
       }
 
-      if (newStatus === 'borrowed') {
+      if (newStatus === 'approved') {
         const { data: updatedBook, error: stockError } = await supabase
           .from('books')
           .update({ quantity: currentStock - 1 })
@@ -82,7 +82,7 @@ export default function PendingRequests() {
       }
 
       showToast(
-        newStatus === 'borrowed'
+        newStatus === 'approved'
           ? `Book approved and released to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`
           : 'Request declined and removed.',
         'success'
@@ -153,7 +153,7 @@ export default function PendingRequests() {
                   </td>
                   <td style={{ padding: '15px 20px', display: 'flex', gap: '10px' }}>
                     <button
-                      onClick={() => handleAction(req.id, 'borrowed', req.book_id, req.books?.quantity, req.users?.role)}
+                      onClick={() => handleAction(req.id, 'approved', req.book_id, req.books?.quantity, req.users?.role)}
                       disabled={req.books?.quantity <= 0}
                       style={{
                         padding: '8px 12px',
@@ -166,7 +166,7 @@ export default function PendingRequests() {
                       Approve
                     </button>
                     <button
-                      onClick={() => handleAction(req.id, 'archived', req.book_id, req.books?.quantity, req.users?.role)}
+                      onClick={() => handleAction(req.id, 'declined', req.book_id, req.books?.quantity, req.users?.role)}
                       style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
                     >
                       Decline

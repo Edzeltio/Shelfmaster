@@ -1,17 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import Toast from './Toast';
 
 export default function PendingRequests() {
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     fetchPendingRequests();
+    const onVisible = () => { if (!document.hidden) fetchPendingRequests(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   async function fetchPendingRequests() {
     setLoading(true);
-    // Join transactions with users and books so we can display their details
     const { data, error } = await supabase
       .from('transactions')
       .select(`
@@ -24,25 +29,27 @@ export default function PendingRequests() {
         books (title, barcode, quantity)
       `)
       .eq('status', 'pending')
-      .order('created_at', { ascending: true }); // Oldest requests first
+      .order('created_at', { ascending: true });
 
-    if (error) console.error(error);
-    else setRequests(data || []);
+    if (error) {
+      console.error(error);
+      showToast('Failed to load pending requests.', 'error');
+    } else {
+      setRequests(data || []);
+    }
     setLoading(false);
   }
 
   const handleAction = async (transactionId, newStatus, bookId, currentStock, userRole) => {
     try {
-      // 1. Determine the smart due date
       const isTeacher = userRole === 'teacher';
-      const dueDate = newStatus === 'borrowed' 
-        ? (isTeacher ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()) 
+      const dueDate = newStatus === 'borrowed'
+        ? (isTeacher ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
         : null;
 
-      // 2. Update the transaction record
       const { error: transError } = await supabase
         .from('transactions')
-        .update({ 
+        .update({
           status: newStatus,
           borrow_date: newStatus === 'borrowed' ? new Date().toISOString() : null,
           due_date: dueDate
@@ -51,25 +58,26 @@ export default function PendingRequests() {
 
       if (transError) throw transError;
 
-      // 3. If approved, deduct 1 from the book's available stock
       if (newStatus === 'borrowed') {
         const { error: stockError } = await supabase
           .from('books')
           .update({ quantity: currentStock - 1 })
           .eq('id', bookId);
-        
         if (stockError) throw stockError;
       }
 
-      alert(newStatus === 'borrowed' 
-        ? `Success! Book released to ${isTeacher ? 'Teacher (No Due Date)' : 'Student (7-Day Due)'}.` 
-        : 'Request declined and removed.'
+      showToast(
+        newStatus === 'borrowed'
+          ? `Book approved and released to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`
+          : 'Request declined and removed.',
+        'success'
       );
-      
-      fetchPendingRequests(); // Refresh the list
+
+      fetchPendingRequests();
 
     } catch (error) {
-      alert("Error processing request: " + error.message);
+      console.error(error);
+      showToast('Error processing request: ' + error.message, 'error');
     }
   };
 
@@ -77,6 +85,8 @@ export default function PendingRequests() {
 
   return (
     <div>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
+
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ color: 'var(--dark-blue)', margin: 0 }}>Pending Borrow Requests</h1>
         <p style={{ color: '#64748b', marginTop: '5px' }}>Verify the Student's ID and hand over the physical book before approving.</p>
@@ -102,55 +112,51 @@ export default function PendingRequests() {
             <tbody>
               {requests.map((req) => (
                 <tr key={req.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  
                   <td style={{ padding: '15px 20px', color: '#64748b' }}>
                     {new Date(req.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                   </td>
-                  
                   <td style={{ padding: '15px 20px' }}>
                     <strong style={{ color: 'var(--dark-blue)', display: 'block' }}>{req.users?.name}</strong>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>ID: {req.users?.student_id || 'N/A'}</span>
                   </td>
-                  
                   <td style={{ padding: '15px 20px' }}>
                     <strong style={{ display: 'block' }}>{req.books?.title}</strong>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Barcode: {req.books?.barcode}</span>
-                    <br/>
+                    <br />
                     <span style={{ fontSize: '0.8rem', color: req.books?.quantity > 0 ? 'var(--green)' : '#ef4444' }}>
                       {req.books?.quantity ?? 0} in stock
                     </span>
                   </td>
-
                   <td style={{ padding: '15px 20px' }}>
-                    <span style={{ 
-                      background: req.users?.role === 'teacher' ? '#FFF0F5' : '#F5FAE8', 
-                      color: req.users?.role === 'teacher' ? 'var(--maroon)' : 'var(--green)', 
-                      padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase' 
+                    <span style={{
+                      background: req.users?.role === 'teacher' ? '#FFF0F5' : '#F5FAE8',
+                      color: req.users?.role === 'teacher' ? 'var(--maroon)' : 'var(--green)',
+                      padding: '4px 8px', borderRadius: '4px', fontSize: '0.8rem', fontWeight: 'bold', textTransform: 'uppercase'
                     }}>
                       {req.users?.role}
                     </span>
                   </td>
-
                   <td style={{ padding: '15px 20px', display: 'flex', gap: '10px' }}>
-                    <button 
+                    <button
                       onClick={() => handleAction(req.id, 'borrowed', req.book_id, req.books?.quantity, req.users?.role)}
                       disabled={req.books?.quantity <= 0}
-                      style={{ 
-                        padding: '8px 12px', background: req.books?.quantity > 0 ? 'var(--green)' : '#9ca3af', 
-                        color: 'white', border: 'none', borderRadius: '4px', cursor: req.books?.quantity > 0 ? 'pointer' : 'not-allowed', 
-                        fontSize: '0.85rem', fontWeight: 'bold' 
+                      style={{
+                        padding: '8px 12px',
+                        background: req.books?.quantity > 0 ? 'var(--green)' : '#9ca3af',
+                        color: 'white', border: 'none', borderRadius: '4px',
+                        cursor: req.books?.quantity > 0 ? 'pointer' : 'not-allowed',
+                        fontSize: '0.85rem', fontWeight: 'bold'
                       }}
                     >
                       Approve
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleAction(req.id, 'archived', req.book_id, req.books?.quantity, req.users?.role)}
                       style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
                     >
                       Decline
                     </button>
                   </td>
-
                 </tr>
               ))}
             </tbody>

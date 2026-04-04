@@ -10,6 +10,9 @@ export default function StudentBooks() {
 
   useEffect(() => {
     fetchData();
+    const onVisible = () => { if (!document.hidden) fetchData(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   async function fetchData() {

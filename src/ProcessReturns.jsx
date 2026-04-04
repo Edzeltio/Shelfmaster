@@ -1,19 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import Toast from './Toast';
 
 export default function ProcessReturns() {
   const [barcode, setBarcode] = useState('');
   const [processing, setProcessing] = useState(false);
-  const [message, setMessage] = useState({ text: '', type: '' });
   const [recentReturns, setRecentReturns] = useState([]);
-  
-  // Ref to automatically keep the scanner input focused
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
   const inputRef = useRef(null);
 
   useEffect(() => {
     fetchRecentReturns();
-    // Keep focus on the barcode input so the librarian doesn't have to keep clicking it
     if (inputRef.current) inputRef.current.focus();
+    const onVisible = () => { if (!document.hidden) fetchRecentReturns(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   async function fetchRecentReturns() {
@@ -27,20 +29,16 @@ export default function ProcessReturns() {
       `)
       .eq('status', 'returned')
       .order('return_date', { ascending: false })
-      .limit(5); // Show only the last 5 returned books
-
+      .limit(5);
     if (data) setRecentReturns(data);
   }
 
   const handleScanSubmit = async (e) => {
     e.preventDefault();
     if (!barcode.trim()) return;
-    
     setProcessing(true);
-    setMessage({ text: '', type: '' });
 
     try {
-      // 1. Find the book using the scanned barcode
       const { data: book, error: bookError } = await supabase
         .from('books')
         .select('id, title, quantity')
@@ -49,7 +47,6 @@ export default function ProcessReturns() {
 
       if (bookError || !book) throw new Error('Book not found in database. Check the barcode.');
 
-      // 2. Find the ACTIVE transaction for this exact book
       const { data: transaction, error: transError } = await supabase
         .from('transactions')
         .select('id, user_id, users(name)')
@@ -59,18 +56,13 @@ export default function ProcessReturns() {
 
       if (transError || !transaction) throw new Error(`"${book.title}" is not currently marked as borrowed.`);
 
-      // 3. Mark transaction as returned
       const { error: updateTransError } = await supabase
         .from('transactions')
-        .update({ 
-          status: 'returned', 
-          return_date: new Date().toISOString() 
-        })
+        .update({ status: 'returned', return_date: new Date().toISOString() })
         .eq('id', transaction.id);
 
       if (updateTransError) throw updateTransError;
 
-      // 4. Put the book back on the shelf (increment stock)
       const { error: updateBookError } = await supabase
         .from('books')
         .update({ quantity: book.quantity + 1 })
@@ -78,68 +70,56 @@ export default function ProcessReturns() {
 
       if (updateBookError) throw updateBookError;
 
-      // SUCCESS!
-      setMessage({ text: `Success: "${book.title}" returned by ${transaction.users?.name}.`, type: 'success' });
-      setBarcode(''); // Clear the input for the next scan
-      fetchRecentReturns(); // Update the log
+      showToast(`"${book.title}" returned by ${transaction.users?.name}. Stock updated.`, 'success');
+      setBarcode('');
+      fetchRecentReturns();
 
     } catch (err) {
-      setMessage({ text: err.message, type: 'error' });
+      showToast(err.message, 'error');
       setBarcode('');
     } finally {
       setProcessing(false);
-      if (inputRef.current) inputRef.current.focus(); // Refocus for the next scan
+      if (inputRef.current) inputRef.current.focus();
     }
   };
 
   return (
     <div style={{ maxWidth: '900px' }}>
-      
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
+
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ color: 'var(--dark-blue)', margin: 0 }}>Process Returns</h1>
         <p style={{ color: '#64748b', marginTop: '5px' }}>Scan a book's barcode to check it back into the library.</p>
       </div>
 
-      {/* SCANNER SECTION */}
       <div style={{ background: 'white', padding: '3rem', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--green)', marginBottom: '2rem', textAlign: 'center' }}>
-        
         <h2 style={{ color: '#334155', margin: '0 0 20px 0' }}>Ready to Scan</h2>
-        
+
         <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '10px', maxWidth: '500px', margin: '0 auto' }}>
-          <input 
+          <input
             ref={inputRef}
-            type="text" 
-            placeholder="Scan or type barcode here..." 
+            type="text"
+            placeholder="Scan or type barcode here..."
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
             disabled={processing}
             style={{ flex: 1, padding: '15px 20px', fontSize: '1.2rem', borderRadius: '8px', border: '2px solid #cbd5e1', outline: 'none' }}
             autoFocus
           />
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={processing || !barcode}
             style={{ padding: '0 25px', background: 'var(--maroon)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer' }}
           >
             {processing ? '...' : 'Process'}
           </button>
         </form>
-
-        {/* Feedback Message Block */}
-        {message.text && (
-          <div style={{ marginTop: '20px', padding: '15px', borderRadius: '8px', backgroundColor: message.type === 'success' ? '#dcfce7' : '#fee2e2', color: message.type === 'success' ? '#166534' : '#991b1b', fontWeight: 'bold', fontSize: '1.1rem' }}>
-            {message.type === 'success' ? '✅ ' : '❌ '}
-            {message.text}
-          </div>
-        )}
       </div>
 
-      {/* RECENTLY RETURNED LOG */}
       <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
         <h3 style={{ margin: 0, padding: '20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
           Recently Returned Log
         </h3>
-        
         {recentReturns.length === 0 ? (
           <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>No recent returns.</div>
         ) : (
@@ -163,7 +143,6 @@ export default function ProcessReturns() {
           </table>
         )}
       </div>
-
     </div>
   );
 }

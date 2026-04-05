@@ -40,32 +40,55 @@ export default function PendingRequests() {
     setLoading(false);
   }
 
-  const handleAction = async (transactionId, newStatus, bookId, currentStock, userRole) => {
-    try {
-      const isTeacher = userRole === 'teacher';
-      const dueDate = newStatus === 'approved'
-        ? (isTeacher ? null : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString())
-        : null;
+  // Auto-discover the status values accepted by the DB constraint
+  const APPROVE_CANDIDATES = ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out', 'released'];
+  const DECLINE_CANDIDATES = ['declined', 'rejected', 'cancelled', 'denied', 'archived'];
 
-      const { data: updatedTrans, error: transError } = await supabase
+  const resolveStatus = async (transactionId, isApprove, isTeacher) => {
+    const storageKey = isApprove ? 'sm_approve_status' : 'sm_decline_status';
+    const cached = localStorage.getItem(storageKey);
+    if (cached) return cached;
+
+    const candidates = isApprove ? APPROVE_CANDIDATES : DECLINE_CANDIDATES;
+    const dueDate = isApprove && !isTeacher
+      ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      : null;
+
+    for (const candidate of candidates) {
+      const { data, error } = await supabase
         .from('transactions')
         .update({
-          status: newStatus,
-          borrow_date: newStatus === 'approved' ? new Date().toISOString() : null,
-          due_date: dueDate
+          status: candidate,
+          borrow_date: isApprove ? new Date().toISOString() : null,
+          due_date: isApprove ? dueDate : null,
         })
         .eq('id', transactionId)
         .select();
 
-      if (transError) throw transError;
-
-      if (!updatedTrans || updatedTrans.length === 0) {
-        throw new Error(
-          'The database rejected this update. Please check that the transactions table has an UPDATE policy enabled for librarians in Supabase.'
-        );
+      if (error?.code === '23514') {
+        console.log(`Status "${candidate}" rejected by constraint, trying next...`);
+        continue;
       }
+      if (error) throw error;
+      if (data && data.length > 0) {
+        console.log(`Discovered working status: "${candidate}"`);
+        localStorage.setItem(storageKey, candidate);
+        return candidate;
+      }
+    }
+    throw new Error(
+      'Could not find an accepted status value. Please go to Supabase → SQL Editor and run:\n' +
+      "SELECT check_clause FROM information_schema.check_constraints WHERE constraint_name = 'transactions_status_check';\n" +
+      'Then share the result so the app can be updated.'
+    );
+  };
 
-      if (newStatus === 'approved') {
+  const handleAction = async (transactionId, isApprove, bookId, currentStock, userRole) => {
+    try {
+      const isTeacher = userRole === 'teacher';
+      const resolvedStatus = await resolveStatus(transactionId, isApprove, isTeacher);
+
+      if (isApprove) {
         const { data: updatedBook, error: stockError } = await supabase
           .from('books')
           .update({ quantity: currentStock - 1 })
@@ -73,20 +96,17 @@ export default function PendingRequests() {
           .select();
 
         if (stockError) throw stockError;
-
         if (!updatedBook || updatedBook.length === 0) {
-          throw new Error(
-            'Transaction approved but stock could not be updated. Check the UPDATE policy on the books table in Supabase.'
-          );
+          throw new Error('Book stock could not be updated. Check the UPDATE policy on the books table in Supabase.');
         }
-      }
 
-      showToast(
-        newStatus === 'approved'
-          ? `Book approved and released to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`
-          : 'Request declined and removed.',
-        'success'
-      );
+        showToast(
+          `Book approved and released to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`,
+          'success'
+        );
+      } else {
+        showToast('Request declined and removed.', 'success');
+      }
 
       fetchPendingRequests();
 
@@ -153,7 +173,7 @@ export default function PendingRequests() {
                   </td>
                   <td style={{ padding: '15px 20px', display: 'flex', gap: '10px' }}>
                     <button
-                      onClick={() => handleAction(req.id, 'approved', req.book_id, req.books?.quantity, req.users?.role)}
+                      onClick={() => handleAction(req.id, true, req.book_id, req.books?.quantity, req.users?.role)}
                       disabled={req.books?.quantity <= 0}
                       style={{
                         padding: '8px 12px',
@@ -166,7 +186,7 @@ export default function PendingRequests() {
                       Approve
                     </button>
                     <button
-                      onClick={() => handleAction(req.id, 'declined', req.book_id, req.books?.quantity, req.users?.role)}
+                      onClick={() => handleAction(req.id, false, req.book_id, req.books?.quantity, req.users?.role)}
                       style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
                     >
                       Decline

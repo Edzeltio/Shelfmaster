@@ -22,7 +22,7 @@ export default function StudentHome() {
       if (!usersId) { return; }
 
       const [loansRes, pendingRes] = await Promise.all([
-        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'approved'),
+        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'borrowed'),
         supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'pending'),
       ]);
 

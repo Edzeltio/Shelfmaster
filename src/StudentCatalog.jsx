@@ -47,12 +47,12 @@ export default function StudentCatalog() {
         .select('id, status')
         .eq('user_id', userData.id)
         .eq('book_id', book.id)
-        .in('status', ['pending', 'approved'])
+        .in('status', ['pending', 'borrowed'])
         .maybeSingle();
 
       if (existing) {
         showToast(
-          existing.status === 'approved'
+          existing.status === 'borrowed'
             ? 'You already have this book borrowed.'
             : 'You already have a pending request for this book.',
           'warning'

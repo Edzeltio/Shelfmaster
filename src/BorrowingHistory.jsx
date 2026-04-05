@@ -78,21 +78,21 @@ export default function BorrowingHistory() {
   }
 
   const isOverdue = (item) => {
-    if (item.status !== 'approved' || !item.due_date) return false;
+    if (item.status !== 'borrowed' || !item.due_date) return false;
     return new Date(item.due_date) < new Date();
   };
 
   const getDisplayData = () => {
     const base = selectedStudent ? history : recentGlobalHistory;
     if (activeFilter === 'all') return base;
-    if (activeFilter === 'active') return base.filter(i => i.status === 'approved');
+    if (activeFilter === 'active') return base.filter(i => i.status === 'borrowed');
     if (activeFilter === 'returned') return base.filter(i => i.status === 'returned');
     if (activeFilter === 'pending') return base.filter(i => i.status === 'pending');
     return base;
   };
 
   const displayData = getDisplayData();
-  const activeLoansCount = (selectedStudent ? history : recentGlobalHistory).filter(i => i.status === 'approved').length;
+  const activeLoansCount = (selectedStudent ? history : recentGlobalHistory).filter(i => i.status === 'borrowed').length;
 
   const downloadPDF = (data, title, fileName) => {
     try {
@@ -242,8 +242,8 @@ export default function BorrowingHistory() {
                     <td style={{ padding: '12px' }}>
                       <span style={{
                         padding: '4px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 'bold',
-                        background: overdue ? '#e11d48' : item.status === 'returned' ? '#dcfce7' : item.status === 'approved' ? '#dbeafe' : '#F5FAE8',
-                        color: overdue ? 'white' : item.status === 'returned' ? '#059669' : item.status === 'approved' ? '#1d4ed8' : 'var(--green)'
+                        background: overdue ? '#e11d48' : item.status === 'returned' ? '#dcfce7' : item.status === 'borrowed' ? '#dbeafe' : '#F5FAE8',
+                        color: overdue ? 'white' : item.status === 'returned' ? '#059669' : item.status === 'borrowed' ? '#1d4ed8' : 'var(--green)'
                       }}>
                         {overdue ? 'OVERDUE' : item.status?.toUpperCase()}
                       </span>

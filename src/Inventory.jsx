@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import BarcodeLabel, { generateBarcode } from './BarcodeLabel';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState('books');
@@ -16,6 +17,7 @@ export default function Inventory() {
 
   const initialFormState = {
     accession_num: '',
+    barcode: '',
     title: '',
     authors: '',
     quantity: 1,
@@ -62,7 +64,8 @@ export default function Inventory() {
       .limit(1);
     const lastNum = data && data[0] ? parseInt(data[0].accession_num) : 0;
     const nextAcc = (lastNum + 1).toString().padStart(5, '0');
-    setFormData({ ...initialFormState, accession_num: nextAcc });
+    const autoBarcode = generateBarcode(nextAcc);
+    setFormData({ ...initialFormState, accession_num: nextAcc, barcode: autoBarcode });
     setShowModal(true);
   };
 
@@ -205,6 +208,7 @@ export default function Inventory() {
             <thead>
               <tr style={{ textAlign: 'left', background: '#F5FAE8', color: '#475569' }}>
                 <th style={thStyle}>Acc #</th>
+                <th style={thStyle}>Barcode</th>
                 <th style={thStyle}>Title</th>
                 <th style={thStyle}>Author</th>
                 <th style={thStyle}>Qty</th>
@@ -213,11 +217,12 @@ export default function Inventory() {
             </thead>
             <tbody>
               {books.length === 0 ? (
-                <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No physical books found. Add one using the button above.</td></tr>
+                <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No physical books found. Add one using the button above.</td></tr>
               ) : (
                 books.map(book => (
                   <tr key={book.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={tdStyle}><code style={codeStyle}>{book.accession_num}</code></td>
+                    <td style={tdStyle}><code style={{ ...codeStyle, background: '#eef2ff', color: '#6366f1', fontSize: '0.75rem' }}>{book.barcode || '—'}</code></td>
                     <td style={tdStyle}><strong>{book.title}</strong></td>
                     <td style={tdStyle}>{book.authors}</td>
                     <td style={tdStyle}>{book.quantity}</td>
@@ -332,36 +337,78 @@ export default function Inventory() {
               {isEditing ? 'Update Book Details' : 'Register New Book'}
             </h3>
             <form onSubmit={handleSaveBook}>
-              <div style={formGridStyle}>
-                <div style={{ ...inputGroup, gridColumn: 'span 1', background: '#F5FAE8', padding: '10px', borderRadius: '8px' }}>
-                  <label style={labelStyle}>Accession # / Barcode</label>
-                  <input type="text" required style={inputStyle} value={formData.accession_num} onChange={e => setFormData({...formData, accession_num: e.target.value})} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                {/* LEFT: form fields */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ ...inputGroup, background: '#F5FAE8', padding: '10px', borderRadius: '8px' }}>
+                    <label style={labelStyle}>Accession #</label>
+                    <input
+                      type="text"
+                      required
+                      style={inputStyle}
+                      value={formData.accession_num}
+                      onChange={e => {
+                        const acc = e.target.value;
+                        setFormData({ ...formData, accession_num: acc, barcode: isEditing ? formData.barcode : generateBarcode(acc) });
+                      }}
+                    />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Barcode (scan ID)</label>
+                    <input
+                      type="text"
+                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '0.85rem', color: '#6366f1', background: '#eef2ff' }}
+                      value={formData.barcode || ''}
+                      onChange={e => setFormData({ ...formData, barcode: e.target.value })}
+                    />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>ISBN</label>
+                    <input type="text" style={inputStyle} value={formData.isbn || ''} onChange={e => setFormData({...formData, isbn: e.target.value})} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Title</label>
+                    <input type="text" required style={inputStyle} value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Authors</label>
+                    <input type="text" required style={inputStyle} value={formData.authors} onChange={e => setFormData({...formData, authors: e.target.value})} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={inputGroup}>
+                      <label style={labelStyle}>Quantity</label>
+                      <input type="number" style={inputStyle} value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                    </div>
+                    <div style={inputGroup}>
+                      <label style={labelStyle}>Subject Class</label>
+                      <input type="text" style={inputStyle} value={formData.subject_class || ''} onChange={e => setFormData({...formData, subject_class: e.target.value})} />
+                    </div>
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Publisher</label>
+                    <input type="text" style={inputStyle} value={formData.publisher || ''} onChange={e => setFormData({...formData, publisher: e.target.value})} />
+                  </div>
                 </div>
-                <div style={inputGroup}>
-                  <label style={labelStyle}>ISBN</label>
-                  <input type="text" style={inputStyle} value={formData.isbn || ''} onChange={e => setFormData({...formData, isbn: e.target.value})} />
-                </div>
-                <div style={{ ...inputGroup, gridColumn: 'span 2' }}>
-                  <label style={labelStyle}>Title</label>
-                  <input type="text" required style={inputStyle} value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-                </div>
-                <div style={inputGroup}>
-                  <label style={labelStyle}>Authors</label>
-                  <input type="text" required style={inputStyle} value={formData.authors} onChange={e => setFormData({...formData, authors: e.target.value})} />
-                </div>
-                <div style={inputGroup}>
-                  <label style={labelStyle}>Quantity</label>
-                  <input type="number" style={inputStyle} value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
-                </div>
-                <div style={inputGroup}>
-                  <label style={labelStyle}>Subject Class</label>
-                  <input type="text" style={inputStyle} value={formData.subject_class || ''} onChange={e => setFormData({...formData, subject_class: e.target.value})} />
-                </div>
-                <div style={inputGroup}>
-                  <label style={labelStyle}>Publisher</label>
-                  <input type="text" style={inputStyle} value={formData.publisher || ''} onChange={e => setFormData({...formData, publisher: e.target.value})} />
+
+                {/* RIGHT: barcode preview */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '10px', padding: '20px', gap: '12px', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Book Label Preview</p>
+                  {formData.barcode ? (
+                    <BarcodeLabel
+                      value={formData.barcode}
+                      title={formData.title}
+                      accession={formData.accession_num}
+                      compact={true}
+                    />
+                  ) : (
+                    <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
+                      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏷️</div>
+                      Enter accession # to generate barcode
+                    </div>
+                  )}
                 </div>
               </div>
+
               <div style={modalFooter}>
                 <button type="button" onClick={() => setShowModal(false)} style={cancelBtnStyle}>Cancel</button>
                 <button type="submit" disabled={loading} style={saveBtnStyle}>
@@ -436,7 +483,7 @@ const codeStyle = { background: '#F5FAE8', padding: '4px 8px', borderRadius: '4p
 const editBtnSmallStyle = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' };
 const archiveBtnStyle = { background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' };
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
-const modalContentStyle = { background: 'white', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' };
+const modalContentStyle = { background: 'white', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '860px', maxHeight: '90vh', overflowY: 'auto' };
 const formGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' };
 const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
 const labelStyle = { fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b' };

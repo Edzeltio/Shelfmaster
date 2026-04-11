@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
+import { supabaseAdmin } from './supabaseAdmin';
 import Toast from './Toast';
 
 export default function PendingRequests() {
@@ -40,7 +41,6 @@ export default function PendingRequests() {
     setLoading(false);
   }
 
-  // Auto-discover the status values accepted by the DB constraint
   const APPROVE_CANDIDATES = ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out', 'released'];
   const DECLINE_CANDIDATES = ['declined', 'rejected', 'cancelled', 'denied', 'archived'];
 
@@ -77,35 +77,98 @@ export default function PendingRequests() {
       }
     }
     throw new Error(
-      'Could not find an accepted status value. Please go to Supabase → SQL Editor and run:\n' +
-      "SELECT check_clause FROM information_schema.check_constraints WHERE constraint_name = 'transactions_status_check';\n" +
-      'Then share the result so the app can be updated.'
+      'Could not find an accepted status value. Please check your Supabase transactions table constraint.'
     );
+  };
+
+  const assignAvailableCopy = async (bookId) => {
+    const { data: copy, error } = await supabaseAdmin
+      .from('book_copies')
+      .select('id, accession_id, copy_number')
+      .eq('book_id', bookId)
+      .eq('status', 'available')
+      .order('copy_number', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      // book_copies table might not exist yet — graceful fallback
+      if (error.code === '42P01') return null;
+      throw new Error('Failed to find available copy: ' + error.message);
+    }
+    return copy || null;
   };
 
   const handleAction = async (transactionId, isApprove, bookId, currentStock, userRole) => {
     try {
       const isTeacher = userRole === 'teacher';
-      const resolvedStatus = await resolveStatus(transactionId, isApprove, isTeacher);
 
       if (isApprove) {
-        const { data: updatedBook, error: stockError } = await supabase
-          .from('books')
-          .update({ quantity: currentStock - 1 })
-          .eq('id', bookId)
-          .select();
-
-        if (stockError) throw stockError;
-        if (!updatedBook || updatedBook.length === 0) {
-          throw new Error('Book stock could not be updated. Check the UPDATE policy on the books table in Supabase.');
+        if (currentStock <= 0) {
+          showToast('No copies available to lend.', 'error');
+          return;
         }
 
-        showToast(
-          `Book approved and released to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`,
-          'success'
-        );
+        // Try to assign a specific physical copy
+        const copy = await assignAvailableCopy(bookId);
+
+        const dueDate = !isTeacher
+          ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+
+        const resolvedStatus = await resolveStatus(transactionId, true, isTeacher);
+
+        // If we found a copy, link it to the transaction and mark it borrowed
+        if (copy) {
+          const { error: copyUpdateError } = await supabaseAdmin
+            .from('book_copies')
+            .update({ status: 'borrowed' })
+            .eq('id', copy.id);
+
+          if (copyUpdateError) throw copyUpdateError;
+
+          // Update transaction with copy_id (if column exists)
+          await supabaseAdmin
+            .from('transactions')
+            .update({
+              status: resolvedStatus,
+              borrow_date: new Date().toISOString(),
+              due_date: dueDate,
+              copy_id: copy.id,
+            })
+            .eq('id', transactionId);
+
+          showToast(
+            `Copy ${copy.accession_id} assigned to ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`,
+            'success'
+          );
+        } else {
+          // Fallback: no per-copy system yet, just update status
+          await supabase
+            .from('transactions')
+            .update({
+              status: resolvedStatus,
+              borrow_date: new Date().toISOString(),
+              due_date: dueDate,
+            })
+            .eq('id', transactionId);
+
+          showToast(
+            `Book approved for ${isTeacher ? 'teacher (no due date)' : 'student (7-day loan)'}.`,
+            'success'
+          );
+        }
+
+        // Decrement available stock on books table
+        const { error: stockError } = await supabaseAdmin
+          .from('books')
+          .update({ quantity: currentStock - 1 })
+          .eq('id', bookId);
+        if (stockError) throw stockError;
+
       } else {
-        showToast('Request declined and removed.', 'success');
+        await resolveStatus(transactionId, false, false);
+        showToast('Request declined.', 'success');
       }
 
       fetchPendingRequests();
@@ -124,7 +187,9 @@ export default function PendingRequests() {
 
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ color: 'var(--dark-blue)', margin: 0 }}>Pending Borrow Requests</h1>
-        <p style={{ color: '#64748b', marginTop: '5px' }}>Verify the Student's ID and hand over the physical book before approving.</p>
+        <p style={{ color: '#64748b', marginTop: '5px' }}>
+          Verify the student's ID and hand over the physical book. Approving automatically assigns the next available copy.
+        </p>
       </div>
 
       {requests.length === 0 ? (
@@ -156,10 +221,8 @@ export default function PendingRequests() {
                   </td>
                   <td style={{ padding: '15px 20px' }}>
                     <strong style={{ display: 'block' }}>{req.books?.title}</strong>
-                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Barcode: {req.books?.barcode}</span>
-                    <br />
-                    <span style={{ fontSize: '0.8rem', color: req.books?.quantity > 0 ? 'var(--green)' : '#ef4444' }}>
-                      {req.books?.quantity ?? 0} in stock
+                    <span style={{ fontSize: '0.8rem', color: req.books?.quantity > 0 ? 'var(--green)' : '#ef4444', fontWeight: '600' }}>
+                      {req.books?.quantity ?? 0} {req.books?.quantity === 1 ? 'copy' : 'copies'} available
                     </span>
                   </td>
                   <td style={{ padding: '15px 20px' }}>
@@ -170,27 +233,32 @@ export default function PendingRequests() {
                     }}>
                       {req.users?.role}
                     </span>
+                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '4px' }}>
+                      {req.users?.role === 'teacher' ? 'No due date' : '7-day loan'}
+                    </div>
                   </td>
-                  <td style={{ padding: '15px 20px', display: 'flex', gap: '10px' }}>
-                    <button
-                      onClick={() => handleAction(req.id, true, req.book_id, req.books?.quantity, req.users?.role)}
-                      disabled={req.books?.quantity <= 0}
-                      style={{
-                        padding: '8px 12px',
-                        background: req.books?.quantity > 0 ? 'var(--green)' : '#9ca3af',
-                        color: 'white', border: 'none', borderRadius: '4px',
-                        cursor: req.books?.quantity > 0 ? 'pointer' : 'not-allowed',
-                        fontSize: '0.85rem', fontWeight: 'bold'
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleAction(req.id, false, req.book_id, req.books?.quantity, req.users?.role)}
-                      style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
-                    >
-                      Decline
-                    </button>
+                  <td style={{ padding: '15px 20px' }}>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button
+                        onClick={() => handleAction(req.id, true, req.book_id, req.books?.quantity, req.users?.role)}
+                        disabled={req.books?.quantity <= 0}
+                        style={{
+                          padding: '8px 12px',
+                          background: req.books?.quantity > 0 ? 'var(--green)' : '#9ca3af',
+                          color: 'white', border: 'none', borderRadius: '4px',
+                          cursor: req.books?.quantity > 0 ? 'pointer' : 'not-allowed',
+                          fontSize: '0.85rem', fontWeight: 'bold'
+                        }}
+                      >
+                        ✓ Approve & Assign Copy
+                      </button>
+                      <button
+                        onClick={() => handleAction(req.id, false, req.book_id, req.books?.quantity, req.users?.role)}
+                        style={{ padding: '8px 12px', background: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+                      >
+                        Decline
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

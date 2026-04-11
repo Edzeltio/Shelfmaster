@@ -1,9 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
 import { supabaseAdmin } from './supabaseAdmin';
-import BarcodeLabel, { generateBarcode } from './BarcodeLabel';
+import BarcodeLabel, { generateBarcode, generateCopyAccessionId } from './BarcodeLabel';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
+
+const MIGRATION_SQL =
+`-- Run this once in your Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS book_copies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+  copy_number INTEGER NOT NULL DEFAULT 1,
+  accession_id TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'available'
+    CHECK (status IN ('available', 'borrowed', 'damaged', 'lost')),
+  date_acquired DATE,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE transactions
+  ADD COLUMN IF NOT EXISTS copy_id UUID REFERENCES book_copies(id);
+
+ALTER TABLE book_copies ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for book_copies" ON book_copies
+  FOR ALL USING (true) WITH CHECK (true);`;
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState('books');
@@ -17,6 +38,12 @@ export default function Inventory() {
   const [ebookForm, setEbookForm] = useState({ title: '', url: '' });
   const [ebookImgValid, setEbookImgValid] = useState(false);
   const [editingEbook, setEditingEbook] = useState(null);
+  const [expandedBookId, setExpandedBookId] = useState(null);
+  const [copiesMap, setCopiesMap] = useState({});
+  const [copiesLoading, setCopiesLoading] = useState(false);
+  const [migrationNeeded, setMigrationNeeded] = useState(false);
+  const [migrationChecked, setMigrationChecked] = useState(false);
+  const [showMigration, setShowMigration] = useState(false);
 
   const initialFormState = {
     accession_num: '',
@@ -49,7 +76,18 @@ export default function Inventory() {
   useEffect(() => {
     fetchInventory();
     checkCoverColumn();
+    checkMigration();
   }, []);
+
+  async function checkMigration() {
+    const { error } = await supabaseAdmin
+      .from('book_copies')
+      .select('id')
+      .limit(1);
+    const needed = error && error.code === '42P01';
+    setMigrationNeeded(needed);
+    setMigrationChecked(true);
+  }
 
   async function checkCoverColumn() {
     const { error } = await supabaseAdmin
@@ -66,12 +104,60 @@ export default function Inventory() {
       .neq('status', 'archived')
       .order('created_at', { ascending: false });
 
-    if (error) { console.error("Fetch error:", error); return; }
+    if (error) { console.error('Fetch error:', error); return; }
 
     const all = data || [];
     setBooks(all.filter(b => b.book_type !== 'eBook'));
     setEbooks(all.filter(b => b.book_type === 'eBook'));
   }
+
+  async function getNextCopyNumber() {
+    const { data } = await supabaseAdmin
+      .from('book_copies')
+      .select('accession_id')
+      .order('accession_id', { ascending: false })
+      .limit(1);
+
+    if (!data || data.length === 0) return 1;
+    const parts = data[0].accession_id.split('-');
+    return parseInt(parts[parts.length - 1]) + 1;
+  }
+
+  async function generateCopiesForBook(bookId, count, dateAcquired, startCopyNum = 1) {
+    const nextNum = await getNextCopyNumber();
+    const year = new Date().getFullYear();
+    const copies = Array.from({ length: count }, (_, i) => ({
+      book_id: bookId,
+      copy_number: startCopyNum + i,
+      accession_id: generateCopyAccessionId(nextNum + i),
+      status: 'available',
+      date_acquired: dateAcquired || new Date().toISOString().split('T')[0],
+    }));
+    const { error } = await supabaseAdmin.from('book_copies').insert(copies);
+    if (error) throw error;
+  }
+
+  async function fetchCopiesForBook(bookId) {
+    setCopiesLoading(true);
+    const { data, error } = await supabaseAdmin
+      .from('book_copies')
+      .select('*')
+      .eq('book_id', bookId)
+      .order('copy_number', { ascending: true });
+    if (!error) {
+      setCopiesMap(prev => ({ ...prev, [bookId]: data || [] }));
+    }
+    setCopiesLoading(false);
+  }
+
+  const toggleExpandCopies = (bookId) => {
+    if (expandedBookId === bookId) {
+      setExpandedBookId(null);
+    } else {
+      setExpandedBookId(bookId);
+      fetchCopiesForBook(bookId);
+    }
+  };
 
   const openAddModal = async () => {
     setIsEditing(false);
@@ -116,7 +202,7 @@ export default function Inventory() {
     const confirmed = window.confirm(`Archive "${book.title}"? It will be hidden from the catalog.`);
     if (confirmed) {
       const { error } = await supabase.from('books').update({ status: 'archived' }).eq('id', book.id);
-      if (error) alert("Archive failed: " + error.message);
+      if (error) alert('Archive failed: ' + error.message);
       else fetchInventory();
     }
   };
@@ -150,13 +236,43 @@ export default function Inventory() {
 
     if (isEditing) {
       const { error } = await supabase.from('books').update(bookPayload).eq('id', currentBookId);
-      if (error) alert(error.message);
+      if (error) { alert(error.message); setLoading(false); return; }
+
+      if (!migrationNeeded) {
+        const existing = copiesMap[currentBookId] || [];
+        const currentCount = existing.length;
+        const newCount = parseInt(formData.quantity) || 1;
+        if (newCount > currentCount) {
+          try {
+            await generateCopiesForBook(
+              currentBookId,
+              newCount - currentCount,
+              formData.date_acquired,
+              currentCount + 1
+            );
+          } catch (err) {
+            console.warn('Copy generation failed:', err.message);
+          }
+        }
+      }
     } else {
-      const { error } = await supabase.from('books').insert([bookPayload]);
-      if (error) alert(error.message);
+      const { data: inserted, error } = await supabase.from('books').insert([bookPayload]).select();
+      if (error) { alert(error.message); setLoading(false); return; }
+
+      if (!migrationNeeded && inserted && inserted[0]) {
+        const bookId = inserted[0].id;
+        const count = parseInt(formData.quantity) || 1;
+        try {
+          await generateCopiesForBook(bookId, count, formData.date_acquired, 1);
+        } catch (err) {
+          alert('Book saved but copy generation failed: ' + err.message + '\n\nMake sure you have run the database migration.');
+        }
+      }
     }
+
     setShowModal(false);
     fetchInventory();
+    if (expandedBookId) fetchCopiesForBook(expandedBookId);
     setLoading(false);
   };
 
@@ -210,10 +326,36 @@ export default function Inventory() {
     setLoading(false);
   };
 
-  const exportBarcodePDF = () => {
-    const booksWithBarcode = books.filter(b => b.barcode);
-    if (booksWithBarcode.length === 0) {
-      alert('No books with barcodes found. Add books first.');
+  const handleCopyStatusChange = async (copyId, bookId, newStatus) => {
+    const { error } = await supabaseAdmin
+      .from('book_copies')
+      .update({ status: newStatus })
+      .eq('id', copyId);
+    if (error) { alert('Failed to update copy status: ' + error.message); return; }
+
+    const copies = copiesMap[bookId] || [];
+    const available = copies.filter(c => c.id !== copyId
+      ? c.status === 'available'
+      : newStatus === 'available'
+    ).length;
+    await supabase.from('books').update({ quantity: available }).eq('id', bookId);
+    fetchCopiesForBook(bookId);
+    fetchInventory();
+  };
+
+  const exportAllCopiesPDF = async () => {
+    if (migrationNeeded) {
+      alert('Please run the database migration first. Click "Database Setup" to view the SQL.');
+      return;
+    }
+
+    const { data: allCopies, error } = await supabaseAdmin
+      .from('book_copies')
+      .select('*, books(title, accession_num)')
+      .order('accession_id', { ascending: true });
+
+    if (error || !allCopies || allCopies.length === 0) {
+      alert('No copies found. Add books first to generate copies.');
       return;
     }
 
@@ -230,7 +372,7 @@ export default function Inventory() {
 
     let labelIndex = 0;
 
-    booksWithBarcode.forEach((book, idx) => {
+    allCopies.forEach((copy, idx) => {
       if (idx > 0 && idx % labelsPerPage === 0) {
         pdf.addPage();
         labelIndex = 0;
@@ -241,10 +383,9 @@ export default function Inventory() {
       const x = marginX + col * cellW;
       const y = marginY + row * cellH;
 
-      // Render barcode to an off-screen canvas
       const canvas = document.createElement('canvas');
       try {
-        JsBarcode(canvas, book.barcode, {
+        JsBarcode(canvas, copy.accession_id, {
           format: 'CODE128',
           width: 1.5,
           height: 36,
@@ -255,42 +396,127 @@ export default function Inventory() {
         const imgData = canvas.toDataURL('image/png');
         const imgW = cellW - 6;
         const imgH = (canvas.height / canvas.width) * imgW;
-
-        // Center the barcode image in the cell
         const imgX = x + (cellW - imgW) / 2;
         const imgY = y + 2;
         pdf.addImage(imgData, 'PNG', imgX, imgY, imgW, imgH);
 
-        // Book title (truncated)
-        const title = book.title.length > 30 ? book.title.slice(0, 30) + '…' : book.title;
+        const title = (copy.books?.title || '').length > 28
+          ? (copy.books?.title || '').slice(0, 28) + '…'
+          : (copy.books?.title || '');
         pdf.setFontSize(7);
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(30, 41, 59);
         pdf.text(title, x + cellW / 2, imgY + imgH + 3, { align: 'center', maxWidth: cellW - 4 });
 
-        // Accession number
         pdf.setFontSize(6.5);
         pdf.setFont('helvetica', 'normal');
         pdf.setTextColor(100, 116, 139);
-        pdf.text(`Acc# ${book.accession_num}`, x + cellW / 2, imgY + imgH + 7, { align: 'center' });
+        pdf.text(`Copy #${copy.copy_number}`, x + cellW / 2, imgY + imgH + 7, { align: 'center' });
 
-        // Cell border
         pdf.setDrawColor(220, 230, 240);
         pdf.setLineWidth(0.2);
         pdf.rect(x + 1, y + 1, cellW - 2, cellH - 2);
-
       } catch (err) {
-        console.warn('Barcode render failed for:', book.barcode, err);
+        console.warn('Barcode render failed for:', copy.accession_id, err);
       }
 
       labelIndex++;
     });
 
-    pdf.save(`ShelfMaster-Barcodes-${new Date().toISOString().split('T')[0]}.pdf`);
+    pdf.save(`ShelfMaster-CopyBarcodes-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
+  const exportCopiesForBook = async (book) => {
+    if (migrationNeeded) return;
+    const copies = copiesMap[book.id] || [];
+    if (copies.length === 0) { alert('No copies found for this book.'); return; }
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = 210;
+    const pageH = 297;
+    const cols = 3;
+    const rows = 8;
+    const marginX = 8;
+    const marginY = 10;
+    const cellW = (pageW - marginX * 2) / cols;
+    const cellH = (pageH - marginY * 2) / rows;
+
+    copies.forEach((copy, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const x = marginX + col * cellW;
+      const y = marginY + row * cellH;
+
+      const canvas = document.createElement('canvas');
+      try {
+        JsBarcode(canvas, copy.accession_id, { format: 'CODE128', width: 1.5, height: 36, fontSize: 9, margin: 4, displayValue: true });
+        const imgData = canvas.toDataURL('image/png');
+        const imgW = cellW - 6;
+        const imgH = (canvas.height / canvas.width) * imgW;
+        const imgX = x + (cellW - imgW) / 2;
+        const imgY = y + 2;
+        pdf.addImage(imgData, 'PNG', imgX, imgY, imgW, imgH);
+
+        const title = book.title.length > 28 ? book.title.slice(0, 28) + '…' : book.title;
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(30, 41, 59);
+        pdf.text(title, x + cellW / 2, imgY + imgH + 3, { align: 'center', maxWidth: cellW - 4 });
+
+        pdf.setFontSize(6.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(`Copy #${copy.copy_number}`, x + cellW / 2, imgY + imgH + 7, { align: 'center' });
+
+        pdf.setDrawColor(220, 230, 240);
+        pdf.setLineWidth(0.2);
+        pdf.rect(x + 1, y + 1, cellW - 2, cellH - 2);
+      } catch (err) {
+        console.warn('Barcode failed:', copy.accession_id, err);
+      }
+    });
+
+    pdf.save(`${book.title.slice(0, 30)}-Copies.pdf`);
   };
 
   return (
     <div style={{ padding: '30px', background: 'var(--cream)', minHeight: '100vh' }}>
+
+      {/* MIGRATION BANNER */}
+      {migrationChecked && migrationNeeded && (
+        <div style={{ background: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: '12px', padding: '16px 20px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <p style={{ margin: 0, fontWeight: 'bold', color: '#92400e' }}>⚠️ One-time database setup required</p>
+              <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#78350f' }}>
+                To enable per-copy barcode tracking, run the SQL below in your <strong>Supabase SQL Editor</strong> once.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowMigration(v => !v)}
+              style={{ background: '#fcd34d', color: '#78350f', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: '16px' }}
+            >
+              {showMigration ? 'Hide SQL' : 'Show Setup SQL'}
+            </button>
+          </div>
+          {showMigration && (
+            <div style={{ marginTop: '14px', position: 'relative' }}>
+              <pre style={{ background: '#1e293b', color: '#86efac', padding: '14px 16px', borderRadius: '8px', fontSize: '0.78rem', fontFamily: 'monospace', whiteSpace: 'pre-wrap', margin: 0 }}>
+                {MIGRATION_SQL}
+              </pre>
+              <button
+                onClick={() => { navigator.clipboard.writeText(MIGRATION_SQL); alert('SQL copied to clipboard!'); }}
+                style={{ position: 'absolute', top: '8px', right: '8px', background: '#334155', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '0.72rem', cursor: 'pointer' }}
+              >
+                Copy
+              </button>
+              <p style={{ margin: '8px 0 0', fontSize: '0.78rem', color: '#92400e' }}>
+                After running the SQL, refresh this page. The warning will disappear automatically.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* HEADER */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -306,8 +532,8 @@ export default function Inventory() {
           )}
           {activeTab === 'books' && (
             <>
-              <button onClick={exportBarcodePDF} style={exportBtnStyle}>
-                📄 Export Barcodes PDF
+              <button onClick={exportAllCopiesPDF} style={exportBtnStyle}>
+                📄 Export All Copy Barcodes
               </button>
               <button onClick={openAddModal} style={addBtnStyle}>
                 + Add New Book
@@ -351,32 +577,151 @@ export default function Inventory() {
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', background: '#F5FAE8', color: '#475569' }}>
-                <th style={thStyle}>Acc #</th>
-                <th style={thStyle}>Barcode</th>
                 <th style={thStyle}>Title</th>
                 <th style={thStyle}>Author</th>
                 <th style={thStyle}>Qty</th>
+                <th style={thStyle}>Physical Copies</th>
                 <th style={thStyle}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {books.length === 0 ? (
-                <tr><td colSpan="6" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No physical books found. Add one using the button above.</td></tr>
+                <tr><td colSpan="5" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No physical books found. Add one using the button above.</td></tr>
               ) : (
                 books.map(book => (
-                  <tr key={book.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={tdStyle}><code style={codeStyle}>{book.accession_num}</code></td>
-                    <td style={tdStyle}><code style={{ ...codeStyle, background: '#eef2ff', color: '#6366f1', fontSize: '0.75rem' }}>{book.barcode || '—'}</code></td>
-                    <td style={tdStyle}><strong>{book.title}</strong></td>
-                    <td style={tdStyle}>{book.authors}</td>
-                    <td style={tdStyle}>{book.quantity}</td>
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => openEditModal(book)} style={editBtnSmallStyle}>Edit</button>
-                        <button onClick={() => handleArchive(book)} style={archiveBtnStyle}>Archive</button>
-                      </div>
-                    </td>
-                  </tr>
+                  <React.Fragment key={book.id}>
+                    <tr style={{ borderBottom: expandedBookId === book.id ? 'none' : '1px solid #f1f5f9' }}>
+                      <td style={tdStyle}>
+                        <strong>{book.title}</strong>
+                        <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>Acc# {book.accession_num}</div>
+                      </td>
+                      <td style={tdStyle}>{book.authors}</td>
+                      <td style={tdStyle}>
+                        <span style={{ fontWeight: 'bold', color: book.quantity > 0 ? 'var(--green)' : '#ef4444' }}>
+                          {book.quantity}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}> avail.</span>
+                      </td>
+                      <td style={tdStyle}>
+                        {migrationNeeded ? (
+                          <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Setup needed</span>
+                        ) : (
+                          <button
+                            onClick={() => toggleExpandCopies(book.id)}
+                            style={{
+                              background: expandedBookId === book.id ? '#1e293b' : '#f1f5f9',
+                              color: expandedBookId === book.id ? 'white' : '#334155',
+                              border: 'none', padding: '5px 12px', borderRadius: '6px',
+                              cursor: 'pointer', fontSize: '0.82rem', fontWeight: 'bold',
+                              display: 'flex', alignItems: 'center', gap: '5px'
+                            }}
+                          >
+                            🏷️ {expandedBookId === book.id ? 'Hide Copies' : 'View Copies'}
+                          </button>
+                        )}
+                      </td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => openEditModal(book)} style={editBtnSmallStyle}>Edit</button>
+                          <button onClick={() => handleArchive(book)} style={archiveBtnStyle}>Archive</button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* EXPANDED COPIES PANEL */}
+                    {expandedBookId === book.id && (
+                      <tr>
+                        <td colSpan="5" style={{ padding: 0, borderBottom: '1px solid #f1f5f9' }}>
+                          <div style={{ background: '#f8fafc', padding: '16px 24px', borderTop: '1px dashed #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                              <p style={{ margin: 0, fontWeight: 'bold', color: '#1e293b', fontSize: '0.9rem' }}>
+                                Physical Copies — <span style={{ color: 'var(--maroon)' }}>{book.title}</span>
+                              </p>
+                              <button
+                                onClick={() => exportCopiesForBook(book)}
+                                style={{ background: '#1e293b', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 'bold', cursor: 'pointer' }}
+                              >
+                                📄 Export Barcodes
+                              </button>
+                            </div>
+
+                            {copiesLoading ? (
+                              <p style={{ color: '#94a3b8', margin: 0 }}>Loading copies...</p>
+                            ) : (copiesMap[book.id] || []).length === 0 ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <p style={{ color: '#94a3b8', margin: 0, fontSize: '0.85rem' }}>No copies generated yet.</p>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await generateCopiesForBook(book.id, book.quantity || 1, book.date_acquired, 1);
+                                      await fetchCopiesForBook(book.id);
+                                    } catch (err) {
+                                      alert('Failed: ' + err.message);
+                                    }
+                                  }}
+                                  style={{ background: 'var(--green)', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer' }}
+                                >
+                                  ✨ Generate {book.quantity || 1} {book.quantity === 1 ? 'Copy' : 'Copies'}
+                                </button>
+                              </div>
+                            ) : (
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                <thead>
+                                  <tr style={{ color: '#64748b' }}>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600' }}>Copy #</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600' }}>Accession ID (Barcode)</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600' }}>Status</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600' }}>Date Acquired</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', fontWeight: '600' }}>Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(copiesMap[book.id] || []).map(copy => (
+                                    <tr key={copy.id} style={{ borderTop: '1px solid #e2e8f0' }}>
+                                      <td style={{ padding: '8px 12px', color: '#475569', fontWeight: 'bold' }}>
+                                        Copy {copy.copy_number}
+                                      </td>
+                                      <td style={{ padding: '8px 12px' }}>
+                                        <code style={{ background: '#eef2ff', color: '#6366f1', padding: '3px 8px', borderRadius: '4px', fontFamily: 'monospace', fontWeight: 'bold', fontSize: '0.82rem' }}>
+                                          {copy.accession_id}
+                                        </code>
+                                      </td>
+                                      <td style={{ padding: '8px 12px' }}>
+                                        <span style={{
+                                          padding: '3px 10px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 'bold',
+                                          background: copy.status === 'available' ? '#dcfce7' : copy.status === 'borrowed' ? '#dbeafe' : '#fef3c7',
+                                          color: copy.status === 'available' ? '#059669' : copy.status === 'borrowed' ? '#1d4ed8' : '#92400e',
+                                        }}>
+                                          {copy.status.charAt(0).toUpperCase() + copy.status.slice(1)}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '8px 12px', color: '#64748b' }}>
+                                        {copy.date_acquired || '—'}
+                                      </td>
+                                      <td style={{ padding: '8px 12px' }}>
+                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                          <select
+                                            value={copy.status}
+                                            onChange={e => handleCopyStatusChange(copy.id, book.id, e.target.value)}
+                                            style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.8rem', cursor: 'pointer' }}
+                                          >
+                                            <option value="available">Available</option>
+                                            <option value="borrowed">Borrowed</option>
+                                            <option value="damaged">Damaged</option>
+                                            <option value="lost">Lost</option>
+                                          </select>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 ))
               )}
             </tbody>
@@ -421,38 +766,19 @@ export default function Inventory() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={inputGroup}>
                   <label style={labelStyle}>eBook Title</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Introduction to Python"
-                    style={inputStyle}
-                    value={ebookForm.title}
-                    onChange={e => setEbookForm({ ...ebookForm, title: e.target.value })}
-                  />
+                  <input type="text" required placeholder="e.g. Introduction to Python" style={inputStyle}
+                    value={ebookForm.title} onChange={e => setEbookForm({ ...ebookForm, title: e.target.value })} />
                 </div>
                 <div style={inputGroup}>
                   <label style={labelStyle}>URL / Link</label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="https://example.com/book.pdf"
-                    style={inputStyle}
-                    value={ebookForm.url}
-                    onChange={e => {
-                      setEbookForm({ ...ebookForm, url: e.target.value });
-                      setEbookImgValid(false);
-                    }}
-                  />
+                  <input type="url" required placeholder="https://example.com/book.pdf" style={inputStyle}
+                    value={ebookForm.url} onChange={e => { setEbookForm({ ...ebookForm, url: e.target.value }); setEbookImgValid(false); }} />
                 </div>
                 {ebookForm.url && (
                   <div style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                    <img
-                      src={ebookForm.url}
-                      alt="eBook preview"
-                      onLoad={() => setEbookImgValid(true)}
-                      onError={() => setEbookImgValid(false)}
-                      style={{ display: ebookImgValid ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain' }}
-                    />
+                    <img src={ebookForm.url} alt="eBook preview"
+                      onLoad={() => setEbookImgValid(true)} onError={() => setEbookImgValid(false)}
+                      style={{ display: ebookImgValid ? 'block' : 'none', width: '100%', maxHeight: '240px', objectFit: 'contain' }} />
                     {!ebookImgValid && (
                       <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
                         <div style={{ fontSize: '2rem', marginBottom: '6px' }}>🔗</div>
@@ -485,11 +811,9 @@ export default function Inventory() {
                 {/* LEFT: form fields */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   <div style={{ ...inputGroup, background: '#F5FAE8', padding: '10px', borderRadius: '8px' }}>
-                    <label style={labelStyle}>Accession #</label>
+                    <label style={labelStyle}>Accession # <span style={{ color: '#94a3b8', fontWeight: 'normal', textTransform: 'none' }}>(book-level)</span></label>
                     <input
-                      type="text"
-                      required
-                      style={inputStyle}
+                      type="text" required style={inputStyle}
                       value={formData.accession_num}
                       onChange={e => {
                         const acc = e.target.value;
@@ -498,39 +822,54 @@ export default function Inventory() {
                     />
                   </div>
                   <div style={inputGroup}>
-                    <label style={labelStyle}>Barcode (scan ID)</label>
-                    <input
-                      type="text"
-                      style={{ ...inputStyle, fontFamily: 'monospace', fontSize: '0.85rem', color: '#6366f1', background: '#eef2ff' }}
-                      value={formData.barcode || ''}
-                      onChange={e => setFormData({ ...formData, barcode: e.target.value })}
-                    />
-                  </div>
-                  <div style={inputGroup}>
                     <label style={labelStyle}>ISBN</label>
-                    <input type="text" style={inputStyle} value={formData.isbn || ''} onChange={e => setFormData({...formData, isbn: e.target.value})} />
+                    <input type="text" style={inputStyle} value={formData.isbn || ''} onChange={e => setFormData({ ...formData, isbn: e.target.value })} />
                   </div>
                   <div style={inputGroup}>
                     <label style={labelStyle}>Title</label>
-                    <input type="text" required style={inputStyle} value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+                    <input type="text" required style={inputStyle} value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} />
                   </div>
                   <div style={inputGroup}>
                     <label style={labelStyle}>Authors</label>
-                    <input type="text" required style={inputStyle} value={formData.authors} onChange={e => setFormData({...formData, authors: e.target.value})} />
+                    <input type="text" required style={inputStyle} value={formData.authors} onChange={e => setFormData({ ...formData, authors: e.target.value })} />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                     <div style={inputGroup}>
-                      <label style={labelStyle}>Quantity</label>
-                      <input type="number" style={inputStyle} value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} />
+                      <label style={labelStyle}>
+                        Number of Copies
+                        {!migrationNeeded && <span style={{ color: 'var(--green)', marginLeft: '4px' }}>✓ auto-generates copy barcodes</span>}
+                      </label>
+                      <input type="number" min="1" style={inputStyle} value={formData.quantity}
+                        onChange={e => setFormData({ ...formData, quantity: e.target.value })} />
                     </div>
                     <div style={inputGroup}>
                       <label style={labelStyle}>Subject Class</label>
-                      <input type="text" style={inputStyle} value={formData.subject_class || ''} onChange={e => setFormData({...formData, subject_class: e.target.value})} />
+                      <input type="text" style={inputStyle} value={formData.subject_class || ''} onChange={e => setFormData({ ...formData, subject_class: e.target.value })} />
                     </div>
                   </div>
                   <div style={inputGroup}>
                     <label style={labelStyle}>Publisher</label>
-                    <input type="text" style={inputStyle} value={formData.publisher || ''} onChange={e => setFormData({...formData, publisher: e.target.value})} />
+                    <input type="text" style={inputStyle} value={formData.publisher || ''} onChange={e => setFormData({ ...formData, publisher: e.target.value })} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Date Acquired</label>
+                    <input type="date" style={inputStyle} value={formData.date_acquired || ''} onChange={e => setFormData({ ...formData, date_acquired: e.target.value })} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Edition</label>
+                    <input type="text" style={inputStyle} value={formData.edition || ''} onChange={e => setFormData({ ...formData, edition: e.target.value })} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Pages</label>
+                    <input type="text" style={inputStyle} value={formData.pages || ''} onChange={e => setFormData({ ...formData, pages: e.target.value })} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Copyright</label>
+                    <input type="text" style={inputStyle} value={formData.copyright || ''} onChange={e => setFormData({ ...formData, copyright: e.target.value })} />
+                  </div>
+                  <div style={inputGroup}>
+                    <label style={labelStyle}>Remark</label>
+                    <input type="text" style={inputStyle} value={formData.remark || ''} onChange={e => setFormData({ ...formData, remark: e.target.value })} />
                   </div>
                 </div>
 
@@ -543,52 +882,24 @@ export default function Inventory() {
 
                     {coverColAvailable === false ? (
                       <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '14px' }}>
-                        <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: '#92400e', fontWeight: 'bold' }}>⚠️ One-time database setup needed</p>
-                        <p style={{ margin: '0 0 10px', fontSize: '0.75rem', color: '#78350f' }}>Run this SQL in your <strong>Supabase SQL Editor</strong> to enable cover images:</p>
-                        <div style={{ position: 'relative' }}>
-                          <code style={{ display: 'block', background: '#1e293b', color: '#86efac', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'pre' }}>ALTER TABLE books{'\n'}ADD COLUMN IF NOT EXISTS{'\n'}cover_image TEXT;</code>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText('ALTER TABLE books ADD COLUMN IF NOT EXISTS cover_image TEXT;');
-                              alert('SQL copied to clipboard!');
-                            }}
-                            style={{ position: 'absolute', top: '6px', right: '6px', background: '#334155', color: 'white', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer' }}
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#92400e' }}>After running it, close and reopen this modal.</p>
+                        <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: '#92400e', fontWeight: 'bold' }}>⚠️ cover_image column missing</p>
+                        <code style={{ display: 'block', background: '#1e293b', color: '#86efac', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'pre' }}>ALTER TABLE books{'\n'}ADD COLUMN IF NOT EXISTS{'\n'}cover_image TEXT;</code>
                       </div>
                     ) : (
                       <>
-                        <input
-                          ref={coverInputRef}
-                          type="file"
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          onChange={e => handleCoverChange(e.target.files[0])}
-                        />
+                        <input ref={coverInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+                          onChange={e => handleCoverChange(e.target.files[0])} />
                         {coverPreview ? (
                           <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                            <img
-                              src={coverPreview}
-                              alt="Cover preview"
-                              style={{ display: 'block', width: '100%', maxHeight: '200px', objectFit: 'contain' }}
-                            />
+                            <img src={coverPreview} alt="Cover preview"
+                              style={{ display: 'block', width: '100%', maxHeight: '200px', objectFit: 'contain' }} />
                             <div style={{ display: 'flex', gap: '6px', padding: '8px', justifyContent: 'flex-end', background: 'rgba(255,255,255,0.9)' }}>
-                              <button
-                                type="button"
-                                onClick={() => coverInputRef.current.click()}
-                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', color: '#334155' }}
-                              >
+                              <button type="button" onClick={() => coverInputRef.current.click()}
+                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', color: '#334155' }}>
                                 Change
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => { setCoverFile(null); setCoverPreview(null); setFormData(f => ({ ...f, cover_image: null })); }}
-                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fff1f2', cursor: 'pointer', color: '#dc2626' }}
-                              >
+                              <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(null); setFormData(f => ({ ...f, cover_image: null })); }}
+                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fff1f2', cursor: 'pointer', color: '#dc2626' }}>
                                 Remove
                               </button>
                             </div>
@@ -599,15 +910,7 @@ export default function Inventory() {
                             onDragOver={e => { e.preventDefault(); setCoverDragOver(true); }}
                             onDragLeave={() => setCoverDragOver(false)}
                             onDrop={e => { e.preventDefault(); setCoverDragOver(false); handleCoverChange(e.dataTransfer.files[0]); }}
-                            style={{
-                              border: `2px dashed ${coverDragOver ? 'var(--maroon)' : '#cbd5e1'}`,
-                              borderRadius: '10px',
-                              padding: '24px 12px',
-                              textAlign: 'center',
-                              cursor: 'pointer',
-                              background: coverDragOver ? '#fff8f8' : '#f8fafc',
-                              transition: 'all 0.15s',
-                            }}
+                            style={{ border: `2px dashed ${coverDragOver ? 'var(--maroon)' : '#cbd5e1'}`, borderRadius: '10px', padding: '24px 12px', textAlign: 'center', cursor: 'pointer', background: coverDragOver ? '#fff8f8' : '#f8fafc', transition: 'all 0.15s' }}
                           >
                             <div style={{ fontSize: '2rem', marginBottom: '6px' }}>🖼️</div>
                             <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Click or drag & drop to upload cover</p>
@@ -618,30 +921,25 @@ export default function Inventory() {
                     )}
                   </div>
 
-                  {/* Barcode preview */}
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#f8fafc', borderRadius: '10px', padding: '16px', gap: '8px', border: '1px solid #e2e8f0' }}>
-                    <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Book Label Preview</p>
-                    {formData.barcode ? (
-                      <BarcodeLabel
-                        value={formData.barcode}
-                        title={formData.title}
-                        accession={formData.accession_num}
-                        compact={true}
-                      />
-                    ) : (
-                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏷️</div>
-                        Enter accession # to generate barcode
-                      </div>
-                    )}
-                  </div>
+                  {/* Copy barcode preview notice */}
+                  {!migrationNeeded && !isEditing && (
+                    <div style={{ background: '#F5FAE8', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '14px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '1.5rem', marginBottom: '6px' }}>🏷️</div>
+                      <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 'bold', color: 'var(--green)' }}>
+                        {formData.quantity || 1} unique copy {parseInt(formData.quantity) === 1 ? 'barcode' : 'barcodes'} will be generated
+                      </p>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#64748b' }}>
+                        Each physical copy gets its own scannable accession ID (e.g. LIB-{new Date().getFullYear()}-000001)
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 
               <div style={modalFooter}>
                 <button type="button" onClick={() => setShowModal(false)} style={cancelBtnStyle}>Cancel</button>
                 <button type="submit" disabled={loading} style={saveBtnStyle}>
-                  {loading ? 'Saving...' : 'Confirm Details'}
+                  {loading ? 'Saving...' : isEditing ? 'Update Book' : `Add Book & Generate ${formData.quantity || 1} ${parseInt(formData.quantity) === 1 ? 'Copy' : 'Copies'}`}
                 </button>
               </div>
             </form>
@@ -657,16 +955,11 @@ function EbookCard({ ebook, onEdit, onArchive }) {
 
   return (
     <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', border: '1px solid #e2e8f0', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-      {/* Cover / Placeholder */}
       <div style={{ height: '160px', background: '#eef2ff', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}>
         {ebook.source && (
-          <img
-            src={ebook.source}
-            alt={ebook.title}
-            onLoad={() => setImgValid(true)}
-            onError={() => setImgValid(false)}
-            style={{ display: imgValid ? 'block' : 'none', width: '100%', height: '100%', objectFit: 'cover' }}
-          />
+          <img src={ebook.source} alt={ebook.title}
+            onLoad={() => setImgValid(true)} onError={() => setImgValid(false)}
+            style={{ display: imgValid ? 'block' : 'none', width: '100%', height: '100%', objectFit: 'cover' }} />
         )}
         {!imgValid && (
           <div style={{ textAlign: 'center', color: '#6366f1' }}>
@@ -675,25 +968,17 @@ function EbookCard({ ebook, onEdit, onArchive }) {
           </div>
         )}
       </div>
-
-      {/* Info */}
       <div style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div>
           <p style={{ margin: 0, fontWeight: 'bold', fontSize: '0.9rem', color: '#1e293b', lineHeight: 1.3 }}>{ebook.title}</p>
           <code style={{ fontSize: '0.7rem', color: '#94a3b8', background: '#f8fafc', padding: '2px 6px', borderRadius: '4px', display: 'inline-block', marginTop: '4px' }}>{ebook.accession_num}</code>
         </div>
-
         {ebook.source && (
-          <a
-            href={ebook.source}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'block', background: '#eef2ff', color: '#6366f1', textAlign: 'center', padding: '7px', borderRadius: '7px', fontSize: '0.82rem', fontWeight: 'bold', textDecoration: 'none' }}
-          >
+          <a href={ebook.source} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'block', background: '#eef2ff', color: '#6366f1', textAlign: 'center', padding: '7px', borderRadius: '7px', fontSize: '0.82rem', fontWeight: 'bold', textDecoration: 'none' }}>
             🔗 Open eBook
           </a>
         )}
-
         <div style={{ display: 'flex', gap: '6px', marginTop: 'auto' }}>
           <button onClick={onEdit} style={{ ...editBtnSmallStyle, flex: 1 }}>Edit</button>
           <button onClick={onArchive} style={{ ...archiveBtnStyle, flex: 1 }}>Archive</button>
@@ -709,14 +994,12 @@ const exportBtnStyle = { background: '#1e293b', color: 'white', border: 'none', 
 const tableCardStyle = { background: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', overflow: 'hidden' };
 const thStyle = { padding: '15px' };
 const tdStyle = { padding: '15px', fontSize: '0.9rem' };
-const codeStyle = { background: '#F5FAE8', padding: '4px 8px', borderRadius: '4px', fontFamily: 'monospace', color: 'var(--maroon)', fontWeight: 'bold' };
 const editBtnSmallStyle = { background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' };
 const archiveBtnStyle = { background: '#fff1f2', color: '#e11d48', border: '1px solid #fecdd3', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' };
 const modalOverlayStyle = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 2000 };
 const modalContentStyle = { background: 'white', padding: '30px', borderRadius: '15px', width: '90%', maxWidth: '860px', maxHeight: '90vh', overflowY: 'auto' };
-const formGridStyle = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' };
 const inputGroup = { display: 'flex', flexDirection: 'column', gap: '5px' };
-const labelStyle = { fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b' };
+const labelStyle = { fontSize: '0.7rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.3px' };
 const inputStyle = { padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' };
 const modalFooter = { display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '30px' };
 const saveBtnStyle = { background: 'var(--green)', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };

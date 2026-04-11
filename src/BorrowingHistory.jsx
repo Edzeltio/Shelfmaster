@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { supabaseAdmin } from './supabaseAdmin';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Toast from './Toast';
@@ -24,12 +25,13 @@ export default function BorrowingHistory() {
 
   async function fetchRecentGlobalHistory() {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
         users (name, student_id),
-        books (title, accession_num)
+        books (title, accession_num),
+        book_copies (accession_id, copy_number)
       `)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -63,11 +65,12 @@ export default function BorrowingHistory() {
     setSearchQuery('');
     setStudents([]);
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
-        books (title, accession_num)
+        books (title, accession_num),
+        book_copies (accession_id, copy_number)
       `)
       .eq('user_id', student.id)
       .order('created_at', { ascending: false });
@@ -104,10 +107,13 @@ export default function BorrowingHistory() {
       doc.setTextColor(100);
       doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
 
-      const tableColumn = ['Student', 'Book', 'Status', 'Due Date', 'Overdue'];
+      const tableColumn = ['Student', 'Book', 'Copy / Accession ID', 'Status', 'Due Date', 'Overdue'];
       const tableRows = data.map(item => [
         item.users?.name || selectedStudent?.name || 'Unknown',
         item.books?.title || 'Untitled',
+        item.book_copies?.accession_id
+          ? `${item.book_copies.accession_id} (Copy #${item.book_copies.copy_number})`
+          : item.books?.accession_num || '—',
         item.status?.toUpperCase() || '-',
         item.due_date ? new Date(item.due_date).toLocaleDateString() : '—',
         isOverdue(item) ? 'YES' : 'NO'
@@ -223,6 +229,7 @@ export default function BorrowingHistory() {
               <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9', color: '#64748b' }}>
                 {!selectedStudent && <th style={{ padding: '12px' }}>Student</th>}
                 <th style={{ padding: '12px' }}>Book Title</th>
+                <th style={{ padding: '12px' }}>Copy / Accession ID</th>
                 <th style={{ padding: '12px' }}>Status</th>
                 <th style={{ padding: '12px' }}>Borrow Date</th>
                 <th style={{ padding: '12px' }}>Due Date</th>
@@ -238,6 +245,20 @@ export default function BorrowingHistory() {
                     <td style={{ padding: '12px', fontWeight: overdue ? 'bold' : 'normal' }}>
                       {item.books?.title}
                       {overdue && <div style={{ color: '#e11d48', fontSize: '0.7rem' }}>⚠ OVERDUE</div>}
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      {item.book_copies?.accession_id ? (
+                        <div>
+                          <code style={{ background: '#eef2ff', color: '#6366f1', padding: '2px 7px', borderRadius: '4px', fontSize: '0.78rem', fontFamily: 'monospace' }}>
+                            {item.book_copies.accession_id}
+                          </code>
+                          <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>
+                            Copy #{item.book_copies.copy_number}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>{item.books?.accession_num || '—'}</span>
+                      )}
                     </td>
                     <td style={{ padding: '12px' }}>
                       <span style={{

@@ -2,11 +2,11 @@ import React, { useRef } from 'react';
 import Barcode from 'react-barcode';
 
 /**
- * Renders a printable barcode label for a book.
+ * Renders a printable barcode label for a book copy.
  * Props:
- *   value      – the barcode string (e.g. "LIB-2026-00001")
+ *   value      – the barcode string (e.g. "LIB-2026-000001")
  *   title      – book title shown beneath the barcode
- *   accession  – accession number shown as small text
+ *   accession  – accession number / copy label shown as small text
  *   compact    – if true, renders smaller (for modals)
  */
 export default function BarcodeLabel({ value, title, accession, compact = false }) {
@@ -43,7 +43,6 @@ export default function BarcodeLabel({ value, title, accession, compact = false 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-      {/* Label preview */}
       <div
         ref={labelRef}
         style={{
@@ -71,12 +70,11 @@ export default function BarcodeLabel({ value, title, accession, compact = false 
         )}
         {accession && (
           <div style={{ fontSize: '0.68rem', color: '#94a3b8', marginTop: '2px' }}>
-            Acc# {accession}
+            {accession}
           </div>
         )}
       </div>
 
-      {/* Print button */}
       <button
         type="button"
         onClick={handlePrint}
@@ -101,10 +99,19 @@ export default function BarcodeLabel({ value, title, accession, compact = false 
 }
 
 /**
- * Generates a barcode value from an accession number.
+ * Generates a barcode value for a book (legacy, per-title).
  * e.g. "00001" → "LIB-2026-00001"
  */
 export function generateBarcode(accessionNum) {
   const year = new Date().getFullYear();
   return `LIB-${year}-${accessionNum}`;
+}
+
+/**
+ * Generates a globally unique accession ID for a physical copy.
+ * e.g. 1234 → "LIB-2026-001234"
+ */
+export function generateCopyAccessionId(num) {
+  const year = new Date().getFullYear();
+  return `LIB-${year}-${num.toString().padStart(6, '0')}`;
 }

@@ -21,8 +21,6 @@ export default function StudentBooks() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    // transactions.user_id is a FK to users.id (the users table PK, not auth UUID)
-    // Use supabaseAdmin to bypass RLS which may block cross-table lookups
     const { data: userData, error: userError } = await supabaseAdmin
       .from('users').select('id').eq('auth_id', user.id).maybeSingle();
     if (userError) console.error('User lookup error:', userError);
@@ -32,7 +30,7 @@ export default function StudentBooks() {
     const [loansRes, requestsRes] = await Promise.all([
       supabaseAdmin
         .from('transactions')
-        .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
+        .select('id, borrow_date, due_date, status, books(title, authors, accession_num), book_copies(accession_id, copy_number)')
         .eq('user_id', userId)
         .in('status', ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out']),
       supabaseAdmin
@@ -99,7 +97,7 @@ export default function StudentBooks() {
                     <thead>
                       <tr style={{ background: '#F5FAE8', color: '#475569' }}>
                         <th style={thStyle}>Book Title</th>
-                        <th style={thStyle}>Accession #</th>
+                        <th style={thStyle}>Copy / Barcode</th>
                         <th style={thStyle}>Borrow Date</th>
                         <th style={thStyle}>Due Date</th>
                         <th style={thStyle}>Time Remaining</th>
@@ -107,15 +105,29 @@ export default function StudentBooks() {
                     </thead>
                     <tbody>
                       {loans.map(loan => {
-                        const countdown = calculateDaysLeft(loan.due_date);
+                        const countdown = loan.due_date ? calculateDaysLeft(loan.due_date) : null;
                         return (
                           <tr key={loan.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={tdStyle}><strong>{loan.books?.title}</strong><div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>by {loan.books?.authors}</div></td>
-                            <td style={tdStyle}>{loan.books?.accession_num || '—'}</td>
+                            <td style={tdStyle}>
+                              <strong>{loan.books?.title}</strong>
+                              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>by {loan.books?.authors}</div>
+                            </td>
+                            <td style={tdStyle}>
+                              {loan.book_copies?.accession_id ? (
+                                <div>
+                                  <code style={{ background: '#eef2ff', color: '#6366f1', padding: '3px 8px', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                                    {loan.book_copies.accession_id}
+                                  </code>
+                                  <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '2px' }}>Copy #{loan.book_copies.copy_number}</div>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '0.82rem' }}>{loan.books?.accession_num || '—'}</span>
+                              )}
+                            </td>
                             <td style={tdStyle}>{loan.borrow_date ? new Date(loan.borrow_date).toLocaleDateString() : '—'}</td>
                             <td style={tdStyle}>{loan.due_date ? new Date(loan.due_date).toLocaleDateString() : '—'}</td>
-                            <td style={{ ...tdStyle, color: countdown.color, fontWeight: countdown.weight }}>
-                              {loan.due_date ? countdown.text : '—'}
+                            <td style={{ ...tdStyle, color: countdown?.color || '#94a3b8', fontWeight: countdown?.weight || 'normal' }}>
+                              {loan.due_date ? countdown?.text : '—'}
                             </td>
                           </tr>
                         );

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
 import BarcodeLabel, { generateBarcode } from './BarcodeLabel';
+import { jsPDF } from 'jspdf';
+import JsBarcode from 'jsbarcode';
 
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState('books');
@@ -150,6 +152,85 @@ export default function Inventory() {
     setLoading(false);
   };
 
+  const exportBarcodePDF = () => {
+    const booksWithBarcode = books.filter(b => b.barcode);
+    if (booksWithBarcode.length === 0) {
+      alert('No books with barcodes found. Add books first.');
+      return;
+    }
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = 210;
+    const pageH = 297;
+    const cols = 3;
+    const rows = 8;
+    const marginX = 8;
+    const marginY = 10;
+    const cellW = (pageW - marginX * 2) / cols;
+    const cellH = (pageH - marginY * 2) / rows;
+    const labelsPerPage = cols * rows;
+
+    let labelIndex = 0;
+
+    booksWithBarcode.forEach((book, idx) => {
+      if (idx > 0 && idx % labelsPerPage === 0) {
+        pdf.addPage();
+        labelIndex = 0;
+      }
+
+      const col = labelIndex % cols;
+      const row = Math.floor(labelIndex / cols);
+      const x = marginX + col * cellW;
+      const y = marginY + row * cellH;
+
+      // Render barcode to an off-screen canvas
+      const canvas = document.createElement('canvas');
+      try {
+        JsBarcode(canvas, book.barcode, {
+          format: 'CODE128',
+          width: 1.5,
+          height: 36,
+          fontSize: 9,
+          margin: 4,
+          displayValue: true,
+        });
+        const imgData = canvas.toDataURL('image/png');
+        const imgW = cellW - 6;
+        const imgH = (canvas.height / canvas.width) * imgW;
+
+        // Center the barcode image in the cell
+        const imgX = x + (cellW - imgW) / 2;
+        const imgY = y + 2;
+        pdf.addImage(imgData, 'PNG', imgX, imgY, imgW, imgH);
+
+        // Book title (truncated)
+        const title = book.title.length > 30 ? book.title.slice(0, 30) + '…' : book.title;
+        pdf.setFontSize(7);
+        pdf.setFont('helvetica', 'bold');
+        pdf.setTextColor(30, 41, 59);
+        pdf.text(title, x + cellW / 2, imgY + imgH + 3, { align: 'center', maxWidth: cellW - 4 });
+
+        // Accession number
+        pdf.setFontSize(6.5);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setTextColor(100, 116, 139);
+        pdf.text(`Acc# ${book.accession_num}`, x + cellW / 2, imgY + imgH + 7, { align: 'center' });
+
+        // Cell border
+        pdf.setDrawColor(220, 230, 240);
+        pdf.setLineWidth(0.2);
+        pdf.rect(x + 1, y + 1, cellW - 2, cellH - 2);
+
+      } catch (err) {
+        console.warn('Barcode render failed for:', book.barcode, err);
+      }
+
+      labelIndex++;
+    });
+
+    pdf.save(`ShelfMaster-Barcodes-${new Date().toISOString().split('T')[0]}.pdf`);
+  };
+
   return (
     <div style={{ padding: '30px', background: 'var(--cream)', minHeight: '100vh' }}>
 
@@ -166,9 +247,14 @@ export default function Inventory() {
             </button>
           )}
           {activeTab === 'books' && (
-            <button onClick={openAddModal} style={addBtnStyle}>
-              + Add New Book
-            </button>
+            <>
+              <button onClick={exportBarcodePDF} style={exportBtnStyle}>
+                📄 Export Barcodes PDF
+              </button>
+              <button onClick={openAddModal} style={addBtnStyle}>
+                + Add New Book
+              </button>
+            </>
           )}
         </div>
       </header>
@@ -476,6 +562,7 @@ function EbookCard({ ebook, onEdit, onArchive }) {
 
 const addBtnStyle = { background: 'var(--green)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
 const ebookBtnStyle = { background: '#6366f1', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const exportBtnStyle = { background: '#1e293b', color: 'white', border: 'none', padding: '12px 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '0.9rem' };
 const tableCardStyle = { background: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', overflow: 'hidden' };
 const thStyle = { padding: '15px' };
 const tdStyle = { padding: '15px', fontSize: '0.9rem' };

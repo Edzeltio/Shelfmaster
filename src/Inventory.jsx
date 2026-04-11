@@ -4,9 +4,12 @@ import { supabase } from './supabaseClient';
 export default function Inventory() {
   const [books, setBooks] = useState([]);
   const [showModal, setShowModal] = useState(false);
+  const [showEbookModal, setShowEbookModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentBookId, setCurrentBookId] = useState(null);
+  const [ebookForm, setEbookForm] = useState({ title: '', url: '' });
+  const [ebookImgValid, setEbookImgValid] = useState(false);
 
   const initialFormState = {
     accession_num: '',
@@ -100,6 +103,44 @@ export default function Inventory() {
     setLoading(false);
   };
 
+  const openEbookModal = () => {
+    setEbookForm({ title: '', url: '' });
+    setEbookImgValid(false);
+    setShowEbookModal(true);
+  };
+
+  const handleSaveEbook = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    const { data: last } = await supabase
+      .from('books')
+      .select('accession_num')
+      .order('accession_num', { ascending: false })
+      .limit(1);
+
+    const lastNum = last && last[0] ? parseInt(last[0].accession_num) : 0;
+    const nextAcc = (lastNum + 1).toString().padStart(5, '0');
+
+    const { error } = await supabase.from('books').insert([{
+      accession_num: nextAcc,
+      title: ebookForm.title,
+      authors: 'eBook',
+      quantity: 1,
+      book_type: 'eBook',
+      source: ebookForm.url,
+      date_acquired: new Date().toISOString().split('T')[0],
+      status: 'active',
+    }]);
+
+    if (error) alert('Failed to save eBook: ' + error.message);
+    else {
+      setShowEbookModal(false);
+      fetchInventory();
+    }
+    setLoading(false);
+  };
+
   return (
     <div style={{ padding: '30px', background: 'var(--cream)', minHeight: '100vh' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
@@ -107,12 +148,14 @@ export default function Inventory() {
           <h2 style={{ color: 'var(--maroon)', margin: 0 }}>Book Inventory</h2>
           <p style={{ color: '#64748b', fontSize: '0.9rem' }}>Manage technical records and collection status.</p>
         </div>
-        <button 
-          onClick={openAddModal} 
-          style={addBtnStyle}
-        >
-          + Add New Book
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button onClick={openEbookModal} style={ebookBtnStyle}>
+            + Add New eBook
+          </button>
+          <button onClick={openAddModal} style={addBtnStyle}>
+            + Add New Book
+          </button>
+        </div>
       </header>
 
       <div style={tableCardStyle}>
@@ -149,7 +192,81 @@ export default function Inventory() {
         </table>
       </div>
 
-      {/* MODAL */}
+      {/* EBOOK MODAL */}
+      {showEbookModal && (
+        <div style={modalOverlayStyle}>
+          <div style={{ ...modalContentStyle, maxWidth: '480px' }}>
+            <h3 style={{ color: 'var(--maroon)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📱 Add New eBook
+            </h3>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '20px' }}>Enter the eBook title and its URL link.</p>
+
+            <form onSubmit={handleSaveEbook}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                <div style={inputGroup}>
+                  <label style={labelStyle}>eBook Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Introduction to Python"
+                    style={inputStyle}
+                    value={ebookForm.title}
+                    onChange={e => setEbookForm({ ...ebookForm, title: e.target.value })}
+                  />
+                </div>
+
+                <div style={inputGroup}>
+                  <label style={labelStyle}>URL / Link</label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://example.com/book.pdf"
+                    style={inputStyle}
+                    value={ebookForm.url}
+                    onChange={e => {
+                      setEbookForm({ ...ebookForm, url: e.target.value });
+                      setEbookImgValid(false);
+                    }}
+                  />
+                </div>
+
+                {ebookForm.url && (
+                  <div style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                    <img
+                      src={ebookForm.url}
+                      alt="eBook preview"
+                      onLoad={() => setEbookImgValid(true)}
+                      onError={() => setEbookImgValid(false)}
+                      style={{
+                        display: ebookImgValid ? 'block' : 'none',
+                        width: '100%',
+                        maxHeight: '240px',
+                        objectFit: 'contain',
+                      }}
+                    />
+                    {!ebookImgValid && (
+                      <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '6px' }}>🔗</div>
+                        URL entered — no image preview available
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div style={modalFooter}>
+                <button type="button" onClick={() => setShowEbookModal(false)} style={cancelBtnStyle}>Cancel</button>
+                <button type="submit" disabled={loading} style={{ ...saveBtnStyle, background: '#6366f1' }}>
+                  {loading ? 'Saving...' : 'Save eBook'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BOOK MODAL */}
       {showModal && (
         <div style={modalOverlayStyle}>
           <div style={modalContentStyle}>
@@ -208,6 +325,7 @@ export default function Inventory() {
 }
 
 const addBtnStyle = { background: 'var(--green)', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', zIndex: 10, position: 'relative' };
+const ebookBtnStyle = { background: '#6366f1', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', zIndex: 10, position: 'relative' };
 const tableCardStyle = { background: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', overflow: 'hidden' };
 const thStyle = { padding: '15px' };
 const tdStyle = { padding: '15px', fontSize: '0.9rem' };

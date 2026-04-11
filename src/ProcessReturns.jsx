@@ -3,6 +3,17 @@ import { supabase } from './supabaseClient';
 import { supabaseAdmin } from './supabaseAdmin';
 import Toast from './Toast';
 
+function isMigrationError(error) {
+  if (!error) return false;
+  const msg = error.message || '';
+  return (
+    msg.includes('book_copies') ||
+    msg.includes('copy_id') ||
+    error.code === '42P01' ||
+    error.code === 'PGRST200'
+  );
+}
+
 export default function ProcessReturns() {
   const [barcode, setBarcode] = useState('');
   const [processing, setProcessing] = useState(false);
@@ -20,7 +31,7 @@ export default function ProcessReturns() {
   }, []);
 
   async function fetchRecentReturns() {
-    const { data } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id,
@@ -32,6 +43,15 @@ export default function ProcessReturns() {
       .eq('status', 'returned')
       .order('return_date', { ascending: false })
       .limit(10);
+
+    if (error && isMigrationError(error)) {
+      ({ data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('id, return_date, users (name, student_id), books (title)')
+        .eq('status', 'returned')
+        .order('return_date', { ascending: false })
+        .limit(10));
+    }
     if (data) setRecentReturns(data);
   }
 
@@ -49,7 +69,10 @@ export default function ProcessReturns() {
         .eq('accession_id', scanned)
         .maybeSingle();
 
-      if (copy) {
+      // If book_copies table doesn't exist yet, skip to legacy fallback
+      if (copyError && isMigrationError(copyError)) {
+        // fall through to strategy 2 below
+      } else if (copy) {
         // Found a specific physical copy
         if (copy.status !== 'borrowed') {
           throw new Error(`Copy ${copy.accession_id} is not currently marked as borrowed. Its status is: "${copy.status}".`);

@@ -3,6 +3,17 @@ import { supabase } from './supabaseClient';
 import { supabaseAdmin } from './supabaseAdmin';
 import StudentNavbar from './StudentNavbar';
 
+function isMigrationError(error) {
+  if (!error) return false;
+  const msg = error.message || '';
+  return (
+    msg.includes('book_copies') ||
+    msg.includes('copy_id') ||
+    error.code === '42P01' ||
+    error.code === 'PGRST200'
+  );
+}
+
 export default function StudentBooks() {
   const [activeTab, setActiveTab] = useState('loans');
   const [loans, setLoans] = useState([]);
@@ -27,7 +38,7 @@ export default function StudentBooks() {
     const userId = userData?.id;
     if (!userId) { setLoading(false); return; }
 
-    const [loansRes, requestsRes] = await Promise.all([
+    let [loansRes, requestsRes] = await Promise.all([
       supabaseAdmin
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num), book_copies(accession_id, copy_number)')
@@ -39,6 +50,14 @@ export default function StudentBooks() {
         .eq('user_id', userId)
         .eq('status', 'pending'),
     ]);
+
+    if (loansRes.error && isMigrationError(loansRes.error)) {
+      loansRes = await supabaseAdmin
+        .from('transactions')
+        .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
+        .eq('user_id', userId)
+        .in('status', ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out']);
+    }
 
     if (loansRes.error) console.error('Loans fetch error:', loansRes.error);
     if (requestsRes.error) console.error('Requests fetch error:', requestsRes.error);

@@ -5,6 +5,17 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Toast from './Toast';
 
+function isMigrationError(error) {
+  if (!error) return false;
+  const msg = error.message || '';
+  return (
+    msg.includes('book_copies') ||
+    msg.includes('copy_id') ||
+    error.code === '42P01' ||
+    error.code === 'PGRST200'
+  );
+}
+
 export default function BorrowingHistory() {
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState([]);
@@ -25,7 +36,7 @@ export default function BorrowingHistory() {
 
   async function fetchRecentGlobalHistory() {
     setLoading(true);
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
@@ -36,6 +47,13 @@ export default function BorrowingHistory() {
       .order('created_at', { ascending: false })
       .limit(50);
 
+    if (error && isMigrationError(error)) {
+      ({ data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('id, status, borrow_date, due_date, return_date, users (name, student_id), books (title, accession_num)')
+        .order('created_at', { ascending: false })
+        .limit(50));
+    }
     if (error) console.error(error);
     setRecentGlobalHistory(data || []);
     setLoading(false);
@@ -65,7 +83,7 @@ export default function BorrowingHistory() {
     setSearchQuery('');
     setStudents([]);
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
@@ -75,6 +93,13 @@ export default function BorrowingHistory() {
       .eq('user_id', student.id)
       .order('created_at', { ascending: false });
 
+    if (error && isMigrationError(error)) {
+      ({ data, error } = await supabaseAdmin
+        .from('transactions')
+        .select('id, status, borrow_date, due_date, return_date, books (title, accession_num)')
+        .eq('user_id', student.id)
+        .order('created_at', { ascending: false }));
+    }
     if (error) console.error(error);
     setHistory(data || []);
     setLoading(false);

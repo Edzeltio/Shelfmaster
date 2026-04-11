@@ -47,14 +47,18 @@ export default function ProcessReturns() {
 
       if (bookError || !book) throw new Error('Book not found in database. Check the barcode.');
 
-      const { data: transaction, error: transError } = await supabase
+      const { data: transactions, error: transError } = await supabase
         .from('transactions')
         .select('id, user_id, users(name)')
         .eq('book_id', book.id)
         .eq('status', 'borrowed')
-        .single();
+        .order('borrow_date', { ascending: true })
+        .limit(1);
 
-      if (transError || !transaction) throw new Error(`"${book.title}" is not currently marked as borrowed.`);
+      if (transError) throw new Error(`Database error: ${transError.message}`);
+      if (!transactions || transactions.length === 0) throw new Error(`"${book.title}" is not currently marked as borrowed.`);
+
+      const transaction = transactions[0];
 
       const { error: updateTransError } = await supabase
         .from('transactions')

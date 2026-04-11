@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { supabaseAdmin } from './supabaseAdmin';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
@@ -25,10 +26,10 @@ export default function LibrarianDashboard() {
       { count: pending, error: pendingErr },
       { count: totalBorrowed, error: borrowedErr },
     ] = await Promise.all([
-      supabase.from('books').select('*', { count: 'exact', head: true }),
-      supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
-      supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabase.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),
+      supabaseAdmin.from('books').select('*', { count: 'exact', head: true }),
+      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
+      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),
     ]);
 
     const anyError = booksErr || loansErr || pendingErr || borrowedErr;
@@ -46,7 +47,7 @@ export default function LibrarianDashboard() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const { data: transactions } = await supabase
+    const { data: transactions } = await supabaseAdmin
       .from('transactions')
       .select('borrow_date')
       .gte('borrow_date', sevenDaysAgo.toISOString());
@@ -65,7 +66,7 @@ export default function LibrarianDashboard() {
 
     setChartData(Object.keys(dateMap).map(key => ({ date: key, loans: dateMap[key] })));
 
-    const { data: topData } = await supabase
+    const { data: topData } = await supabaseAdmin
       .from('transactions')
       .select('book_id, books(title, authors)')
       .limit(20);

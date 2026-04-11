@@ -84,7 +84,12 @@ export default function Inventory() {
       .from('book_copies')
       .select('id')
       .limit(1);
-    const needed = error && error.code === '42P01';
+    const needed = error && (
+      error.code === '42P01' ||
+      error.code === 'PGRST200' ||
+      (error.message || '').includes('book_copies') ||
+      (error.message || '').includes('schema cache')
+    );
     setMigrationNeeded(needed);
     setMigrationChecked(true);
   }
@@ -112,12 +117,13 @@ export default function Inventory() {
   }
 
   async function getNextCopyNumber() {
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from('book_copies')
       .select('accession_id')
       .order('accession_id', { ascending: false })
       .limit(1);
 
+    if (error) return 1; // table doesn't exist yet — start from 1
     if (!data || data.length === 0) return 1;
     const parts = data[0].accession_id.split('-');
     return parseInt(parts[parts.length - 1]) + 1;
@@ -265,7 +271,12 @@ export default function Inventory() {
         try {
           await generateCopiesForBook(bookId, count, formData.date_acquired, 1);
         } catch (err) {
-          alert('Book saved but copy generation failed: ' + err.message + '\n\nMake sure you have run the database migration.');
+          const msg = err.message || '';
+          const isMigErr = msg.includes('book_copies') || msg.includes('schema cache') || msg.includes('PGRST200');
+          if (!isMigErr) {
+            alert('Book saved but copy generation failed: ' + err.message);
+          }
+          // If migration not done yet, silently skip — the banner will guide the user
         }
       }
     }

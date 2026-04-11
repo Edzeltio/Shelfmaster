@@ -9,6 +9,7 @@ function isMigrationError(error) {
   return (
     msg.includes('book_copies') ||
     msg.includes('copy_id') ||
+    msg.includes('schema cache') ||
     error.code === '42P01' ||
     error.code === 'PGRST200'
   );

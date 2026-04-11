@@ -5,10 +5,11 @@ import {
 } from 'recharts';
 
 export default function LibrarianDashboard() {
-  const [stats, setStats] = useState({ totalBooks: 0, activeLoans: 0, pending: 0 });
+  const [stats, setStats] = useState({ totalBooks: 0, activeLoans: 0, pending: 0, totalBorrowed: 0 });
   const [chartData, setChartData] = useState([]);
   const [topBooks, setTopBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [statsError, setStatsError] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -16,12 +17,31 @@ export default function LibrarianDashboard() {
 
   async function fetchDashboardData() {
     setLoading(true);
-    
-    const { count: books } = await supabase.from('books').select('*', { count: 'exact', head: true });
-    const { count: loans } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed');
-    const { count: pending } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    setStatsError(null);
 
-    setStats({ totalBooks: books || 0, activeLoans: loans || 0, pending: pending || 0 });
+    const [
+      { count: books, error: booksErr },
+      { count: loans, error: loansErr },
+      { count: pending, error: pendingErr },
+      { count: totalBorrowed, error: borrowedErr },
+    ] = await Promise.all([
+      supabase.from('books').select('*', { count: 'exact', head: true }),
+      supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
+      supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),
+    ]);
+
+    const anyError = booksErr || loansErr || pendingErr || borrowedErr;
+    if (anyError) {
+      setStatsError('Some stats could not be loaded. Check your database permissions.');
+    }
+
+    setStats({
+      totalBooks: books ?? 0,
+      activeLoans: loans ?? 0,
+      pending: pending ?? 0,
+      totalBorrowed: totalBorrowed ?? 0,
+    });
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -72,11 +92,19 @@ export default function LibrarianDashboard() {
         <p style={{ color: '#64748b' }}>Welcome back! Here is what's happening in your library today.</p>
       </header>
 
+      {/* STATS ERROR BANNER */}
+      {statsError && (
+        <div style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '10px', padding: '12px 18px', marginBottom: '20px', color: '#856404', fontSize: '0.9rem' }}>
+          ⚠️ {statsError}
+        </div>
+      )}
+
       {/* STATS CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
-        <StatCard title="Total Collection" value={stats.totalBooks} color="var(--maroon)" />
-        <StatCard title="Active Loans" value={stats.activeLoans} color="var(--green)" />
-        <StatCard title="Pending Requests" value={stats.pending} color="var(--yellow)" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+        <StatCard title="Total Collection" value={stats.totalBooks} color="var(--maroon)" icon="📚" />
+        <StatCard title="Active Loans" value={stats.activeLoans} color="var(--green)" icon="📖" />
+        <StatCard title="Pending Requests" value={stats.pending} color="var(--yellow)" icon="⏳" />
+        <StatCard title="Books Borrowed" value={stats.totalBorrowed} color="#6366f1" icon="🎓" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px' }}>
@@ -131,11 +159,16 @@ const cardStyle = {
   border: '1px solid #e2e8f0'
 };
 
-function StatCard({ title, value, color }) {
+function StatCard({ title, value, color, icon }) {
   return (
-    <div style={{ background: 'white', padding: '25px', borderRadius: '15px', borderLeft: `6px solid ${color}`, boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-      <div style={{ color: '#64748b', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.5px' }}>{title}</div>
-      <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#1e293b', marginTop: '10px' }}>{value}</div>
+    <div style={{ background: 'white', padding: '25px', borderRadius: '15px', borderLeft: `6px solid ${color}`, boxShadow: '0 4px 15px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {icon && (
+        <div style={{ fontSize: '2rem', lineHeight: 1 }}>{icon}</div>
+      )}
+      <div>
+        <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.5px' }}>{title}</div>
+        <div style={{ fontSize: '2.2rem', fontWeight: 'bold', color: '#1e293b', marginTop: '6px' }}>{value}</div>
+      </div>
     </div>
   );
 }

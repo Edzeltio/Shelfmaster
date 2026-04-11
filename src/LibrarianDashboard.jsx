@@ -113,8 +113,8 @@ export default function LibrarianDashboard() {
         {/* CHART SECTION */}
         <div style={cardStyle}>
           <h3 style={{ margin: '0 0 20px 0', color: 'var(--maroon)' }}>Monthly Circulation Trends</h3>
-          <div style={{ width: '100%', height: 300 }}>
-            <ResponsiveContainer>
+          <div style={{ width: '100%', height: 300, minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="colorLoans" x1="0" y1="0" x2="0" y2="1">

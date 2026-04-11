@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './supabaseClient';
+import { supabaseAdmin } from './supabaseAdmin';
 import BarcodeLabel, { generateBarcode } from './BarcodeLabel';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
@@ -34,14 +35,29 @@ export default function Inventory() {
     copyright: '',
     source: '',
     remark: '',
-    status: 'active'
+    status: 'active',
+    cover_image: null,
   };
 
   const [formData, setFormData] = useState(initialFormState);
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState(null);
+  const [coverDragOver, setCoverDragOver] = useState(false);
+  const [coverColAvailable, setCoverColAvailable] = useState(null);
+  const coverInputRef = useRef(null);
 
   useEffect(() => {
     fetchInventory();
+    checkCoverColumn();
   }, []);
+
+  async function checkCoverColumn() {
+    const { error } = await supabaseAdmin
+      .from('books')
+      .select('cover_image')
+      .limit(1);
+    setCoverColAvailable(!error || error.code !== '42703');
+  }
 
   async function fetchInventory() {
     const { data, error } = await supabase
@@ -68,6 +84,8 @@ export default function Inventory() {
     const nextAcc = (lastNum + 1).toString().padStart(5, '0');
     const autoBarcode = generateBarcode(nextAcc);
     setFormData({ ...initialFormState, accession_num: nextAcc, barcode: autoBarcode });
+    setCoverFile(null);
+    setCoverPreview(null);
     setShowModal(true);
   };
 
@@ -75,7 +93,23 @@ export default function Inventory() {
     setIsEditing(true);
     setCurrentBookId(book.id);
     setFormData({ ...book });
+    setCoverFile(null);
+    setCoverPreview(book.cover_image || null);
     setShowModal(true);
+  };
+
+  const handleCoverChange = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (JPG, PNG, WEBP, etc.).');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be 5 MB or less.');
+      return;
+    }
+    setCoverFile(file);
+    setCoverPreview(URL.createObjectURL(file));
   };
 
   const handleArchive = async (book) => {
@@ -90,11 +124,35 @@ export default function Inventory() {
   const handleSaveBook = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    let coverUrl = formData.cover_image || null;
+
+    if (coverFile) {
+      const ext = coverFile.name.split('.').pop().toLowerCase();
+      const filename = `covers/${Date.now()}-${formData.accession_num}.${ext}`;
+      await supabaseAdmin.storage.createBucket('book-covers', { public: true }).catch(() => {});
+      const { error: upErr } = await supabaseAdmin.storage
+        .from('book-covers')
+        .upload(filename, coverFile, { upsert: true, contentType: coverFile.type });
+      if (upErr) {
+        alert('Image upload failed: ' + upErr.message);
+        setLoading(false);
+        return;
+      }
+      const { data: urlData } = supabaseAdmin.storage.from('book-covers').getPublicUrl(filename);
+      coverUrl = urlData.publicUrl;
+    }
+
+    const { cover_image: _ignored, ...formWithoutCover } = formData;
+    const bookPayload = coverColAvailable
+      ? { ...formWithoutCover, cover_image: coverUrl }
+      : formWithoutCover;
+
     if (isEditing) {
-      const { error } = await supabase.from('books').update(formData).eq('id', currentBookId);
+      const { error } = await supabase.from('books').update(bookPayload).eq('id', currentBookId);
       if (error) alert(error.message);
     } else {
-      const { error } = await supabase.from('books').insert([formData]);
+      const { error } = await supabase.from('books').insert([bookPayload]);
       if (error) alert(error.message);
     }
     setShowModal(false);
@@ -476,22 +534,107 @@ export default function Inventory() {
                   </div>
                 </div>
 
-                {/* RIGHT: barcode preview */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '10px', padding: '20px', gap: '12px', border: '1px solid #e2e8f0' }}>
-                  <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Book Label Preview</p>
-                  {formData.barcode ? (
-                    <BarcodeLabel
-                      value={formData.barcode}
-                      title={formData.title}
-                      accession={formData.accession_num}
-                      compact={true}
-                    />
-                  ) : (
-                    <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
-                      <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏷️</div>
-                      Enter accession # to generate barcode
-                    </div>
-                  )}
+                {/* RIGHT: cover upload + barcode preview */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                  {/* Cover image uploader */}
+                  <div>
+                    <p style={{ margin: '0 0 6px', fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cover Image <span style={{ color: '#94a3b8', fontWeight: 'normal', textTransform: 'none' }}>(max 5 MB)</span></p>
+
+                    {coverColAvailable === false ? (
+                      <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: '10px', padding: '14px' }}>
+                        <p style={{ margin: '0 0 8px', fontSize: '0.8rem', color: '#92400e', fontWeight: 'bold' }}>⚠️ One-time database setup needed</p>
+                        <p style={{ margin: '0 0 10px', fontSize: '0.75rem', color: '#78350f' }}>Run this SQL in your <strong>Supabase SQL Editor</strong> to enable cover images:</p>
+                        <div style={{ position: 'relative' }}>
+                          <code style={{ display: 'block', background: '#1e293b', color: '#86efac', padding: '10px 12px', borderRadius: '6px', fontSize: '0.75rem', fontFamily: 'monospace', whiteSpace: 'pre' }}>ALTER TABLE books{'\n'}ADD COLUMN IF NOT EXISTS{'\n'}cover_image TEXT;</code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText('ALTER TABLE books ADD COLUMN IF NOT EXISTS cover_image TEXT;');
+                              alert('SQL copied to clipboard!');
+                            }}
+                            style={{ position: 'absolute', top: '6px', right: '6px', background: '#334155', color: 'white', border: 'none', borderRadius: '4px', padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer' }}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <p style={{ margin: '8px 0 0', fontSize: '0.72rem', color: '#92400e' }}>After running it, close and reopen this modal.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <input
+                          ref={coverInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={e => handleCoverChange(e.target.files[0])}
+                        />
+                        {coverPreview ? (
+                          <div style={{ position: 'relative', borderRadius: '10px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                            <img
+                              src={coverPreview}
+                              alt="Cover preview"
+                              style={{ display: 'block', width: '100%', maxHeight: '200px', objectFit: 'contain' }}
+                            />
+                            <div style={{ display: 'flex', gap: '6px', padding: '8px', justifyContent: 'flex-end', background: 'rgba(255,255,255,0.9)' }}>
+                              <button
+                                type="button"
+                                onClick={() => coverInputRef.current.click()}
+                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer', color: '#334155' }}
+                              >
+                                Change
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setCoverFile(null); setCoverPreview(null); setFormData(f => ({ ...f, cover_image: null })); }}
+                                style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fff1f2', cursor: 'pointer', color: '#dc2626' }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => coverInputRef.current.click()}
+                            onDragOver={e => { e.preventDefault(); setCoverDragOver(true); }}
+                            onDragLeave={() => setCoverDragOver(false)}
+                            onDrop={e => { e.preventDefault(); setCoverDragOver(false); handleCoverChange(e.dataTransfer.files[0]); }}
+                            style={{
+                              border: `2px dashed ${coverDragOver ? 'var(--maroon)' : '#cbd5e1'}`,
+                              borderRadius: '10px',
+                              padding: '24px 12px',
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              background: coverDragOver ? '#fff8f8' : '#f8fafc',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            <div style={{ fontSize: '2rem', marginBottom: '6px' }}>🖼️</div>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Click or drag & drop to upload cover</p>
+                            <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: '#94a3b8' }}>JPG, PNG, WEBP — max 5 MB</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Barcode preview */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#f8fafc', borderRadius: '10px', padding: '16px', gap: '8px', border: '1px solid #e2e8f0' }}>
+                    <p style={{ margin: 0, fontSize: '0.75rem', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Book Label Preview</p>
+                    {formData.barcode ? (
+                      <BarcodeLabel
+                        value={formData.barcode}
+                        title={formData.title}
+                        accession={formData.accession_num}
+                        compact={true}
+                      />
+                    ) : (
+                      <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏷️</div>
+                        Enter accession # to generate barcode
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

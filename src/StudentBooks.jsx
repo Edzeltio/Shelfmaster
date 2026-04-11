@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { supabaseAdmin } from './supabaseAdmin';
 import StudentNavbar from './StudentNavbar';
 
 export default function StudentBooks() {
@@ -21,19 +22,20 @@ export default function StudentBooks() {
     if (!user) { setLoading(false); return; }
 
     // transactions.user_id is a FK to users.id (the users table PK, not auth UUID)
-    const { data: userData, error: userError } = await supabase
+    // Use supabaseAdmin to bypass RLS which may block cross-table lookups
+    const { data: userData, error: userError } = await supabaseAdmin
       .from('users').select('id').eq('auth_id', user.id).maybeSingle();
     if (userError) console.error('User lookup error:', userError);
     const userId = userData?.id;
     if (!userId) { setLoading(false); return; }
 
     const [loansRes, requestsRes] = await Promise.all([
-      supabase
+      supabaseAdmin
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
         .eq('user_id', userId)
-        .eq('status', 'borrowed'),
-      supabase
+        .in('status', ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out']),
+      supabaseAdmin
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
         .eq('user_id', userId)

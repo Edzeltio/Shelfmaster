@@ -358,7 +358,7 @@ export default function ProcessReturns() {
                 ? '0 0 0 4px #22c55e, 0 0 28px 8px rgba(34,197,94,0.45)'
                 : '0 0 0 3px #94a3b8',
               transition: 'box-shadow 0.1s ease',
-              background: '#000', width: '360px', maxWidth: '100%', margin: '0 auto'
+              background: '#000', width: '100%', maxWidth: '100%', margin: '0 auto'
             }}>
               <video
                 ref={videoRef}
@@ -366,16 +366,6 @@ export default function ProcessReturns() {
                 muted
                 playsInline
               />
-              {/* Aim reticle */}
-              <div style={{
-                position: 'absolute', top: '50%', left: '50%',
-                transform: 'translate(-50%, -50%)',
-                width: '220px', height: '80px',
-                border: `2px solid ${scanFlash ? '#22c55e' : 'rgba(255,255,255,0.7)'}`,
-                borderRadius: '6px', pointerEvents: 'none',
-                boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)',
-                transition: 'border-color 0.1s ease'
-              }} />
               {/* Green flash overlay on successful scan */}
               {scanFlash && (
                 <div style={{

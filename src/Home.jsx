@@ -76,11 +76,18 @@ export default function Home() {
           [Hero Illustration]
         </div>
 
-        {/* Live search bar */}
-        <form className="search-container" onSubmit={handleSearch} style={{ display: 'flex' }}>
+      </section>
+
+      {/* SEARCH BAR SECTION */}
+      <section className="search-section">
+        <span className="search-section-label">Search the Collection</span>
+        <form className="search-container" onSubmit={handleSearch}>
+          <svg className="search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
           <input
             type="text"
-            placeholder="Search for books, authors, or subjects..."
+            placeholder="Search by title, author, or subject..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -88,10 +95,33 @@ export default function Home() {
                 catalogRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }
             }}
-            style={{ flex: 1, fontSize: '1rem', padding: '0 16px' }}
+            autoComplete="off"
           />
-          <button className="search-btn" type="submit">🔍</button>
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm('')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '1.1rem', lineHeight: 1, padding: '0 4px', flexShrink: 0 }}
+              aria-label="Clear search"
+            >✕</button>
+          )}
+          <button className="search-btn" type="submit">Search</button>
         </form>
+        <div className="search-chips">
+          {['Mathematics', 'Science', 'Fiction', 'Programming', 'History', 'Philosophy'].map(tag => (
+            <button
+              key={tag}
+              type="button"
+              className="search-chip"
+              onClick={() => {
+                setSearchTerm(tag);
+                if (catalogRef.current) catalogRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              {tag}
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* BOOK CATALOG */}

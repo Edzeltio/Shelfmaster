@@ -162,20 +162,53 @@ export default function StudentCatalog() {
                   const isAvailable = qty > 0;
                   return (
                     <div key={book.id} style={cardStyle}>
-                      <div style={categoryBadgeStyle}>{getCategory(book)}</div>
-                      <h3 style={bookTitleStyle}>{book.title}</h3>
-                      <p style={authorStyle}>by {book.authors}</p>
-                      <div style={footerStyle}>
-                        <span style={{ fontSize: '0.82rem', fontWeight: '600', color: isAvailable ? 'var(--green)' : '#ef4444' }}>
-                          {isAvailable ? `✅ ${qty} Available` : '❌ Out of Stock'}
-                        </span>
-                        <button
-                          disabled={!isAvailable || addingId === book.id}
-                          onClick={() => handleAddToCart(book)}
-                          style={{ ...buttonStyle, opacity: !isAvailable ? 0.4 : 1, cursor: !isAvailable ? 'not-allowed' : 'pointer' }}
-                        >
-                          {addingId === book.id ? '...' : 'Request'}
-                        </button>
+                      {/* Cover image */}
+                      <div style={coverWrapStyle}>
+                        {book.cover_image ? (
+                          <img
+                            src={book.cover_image}
+                            alt={book.title}
+                            style={coverImgStyle}
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                        ) : null}
+                        <div style={{
+                          ...coverPlaceholderStyle,
+                          display: book.cover_image ? 'none' : 'flex'
+                        }}>
+                          <span style={{ fontSize: '2.8rem', marginBottom: '6px' }}>📖</span>
+                          <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)', textAlign: 'center', padding: '0 10px', fontWeight: 600, lineHeight: 1.3 }}>
+                            {book.title}
+                          </span>
+                        </div>
+                        {/* Availability ribbon */}
+                        <div style={{
+                          position: 'absolute', top: '10px', right: '10px',
+                          background: isAvailable ? 'var(--green)' : '#ef4444',
+                          color: 'white', fontSize: '0.7rem', fontWeight: 700,
+                          padding: '3px 8px', borderRadius: '20px',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.2)'
+                        }}>
+                          {isAvailable ? `${qty} left` : 'Out of stock'}
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '14px 16px 16px' }}>
+                        <div style={categoryBadgeStyle}>{getCategory(book)}</div>
+                        <h3 style={bookTitleStyle}>{book.title}</h3>
+                        <p style={authorStyle}>by {book.authors}</p>
+                        <div style={footerStyle}>
+                          <span style={{ fontSize: '0.82rem', fontWeight: '600', color: isAvailable ? 'var(--green)' : '#ef4444' }}>
+                            {isAvailable ? `✅ ${qty} Available` : '❌ Out of Stock'}
+                          </span>
+                          <button
+                            disabled={!isAvailable || addingId === book.id}
+                            onClick={() => handleAddToCart(book)}
+                            style={{ ...buttonStyle, opacity: !isAvailable ? 0.4 : 1, cursor: !isAvailable ? 'not-allowed' : 'pointer' }}
+                          >
+                            {addingId === book.id ? '...' : 'Request'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -231,11 +264,36 @@ const gridStyle = {
 
 const cardStyle = {
   background: 'white',
-  padding: '22px',
   borderRadius: '14px',
   boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
   display: 'flex',
   flexDirection: 'column',
+  overflow: 'hidden',
+};
+
+const coverWrapStyle = {
+  position: 'relative',
+  width: '100%',
+  height: '180px',
+  overflow: 'hidden',
+  flexShrink: 0,
+};
+
+const coverImgStyle = {
+  width: '100%',
+  height: '100%',
+  objectFit: 'cover',
+  display: 'block',
+};
+
+const coverPlaceholderStyle = {
+  width: '100%',
+  height: '100%',
+  background: 'linear-gradient(135deg, #7f1d1d 0%, #991b1b 40%, #1e3a5f 100%)',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
 };
 
 const categoryBadgeStyle = {

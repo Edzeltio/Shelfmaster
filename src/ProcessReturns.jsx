@@ -26,6 +26,8 @@ export default function ProcessReturns() {
   const [cameras, setCameras] = useState([]);
   const [selectedCamera, setSelectedCamera] = useState('');
   const [scanning, setScanning] = useState(false);
+  const [scanFlash, setScanFlash] = useState(false);
+  const [detectedCode, setDetectedCode] = useState('');
 
   const inputRef = useRef(null);
   const videoRef = useRef(null);
@@ -34,6 +36,29 @@ export default function ProcessReturns() {
   const processingRef = useRef(false);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
+
+  function playBeep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 1480;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.18);
+    } catch (_) {}
+  }
+
+  function triggerScanFeedback(code) {
+    playBeep();
+    setDetectedCode(code);
+    setScanFlash(true);
+    setTimeout(() => setScanFlash(false), 600);
+    setTimeout(() => setDetectedCode(''), 2500);
+  }
 
   useEffect(() => {
     fetchRecentReturns();
@@ -153,6 +178,7 @@ export default function ProcessReturns() {
     processingRef.current = true;
     setProcessing(true);
     setBarcode(scanned);
+    triggerScanFeedback(scanned);
 
     try {
       await processReturn(scanned);
@@ -319,7 +345,11 @@ export default function ProcessReturns() {
             <div style={{
               position: 'relative', display: 'inline-block',
               borderRadius: '12px', overflow: 'hidden',
-              boxShadow: '0 0 0 3px var(--green)', maxWidth: '100%'
+              boxShadow: scanFlash
+                ? '0 0 0 4px #22c55e, 0 0 28px 8px rgba(34,197,94,0.45)'
+                : '0 0 0 3px #94a3b8',
+              transition: 'box-shadow 0.1s ease',
+              background: '#000', maxWidth: '100%'
             }}>
               <video
                 ref={videoRef}
@@ -332,17 +362,43 @@ export default function ProcessReturns() {
                 position: 'absolute', top: '50%', left: '50%',
                 transform: 'translate(-50%, -50%)',
                 width: '220px', height: '80px',
-                border: '2px solid rgba(255,255,255,0.7)',
+                border: `2px solid ${scanFlash ? '#22c55e' : 'rgba(255,255,255,0.7)'}`,
                 borderRadius: '6px', pointerEvents: 'none',
-                boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)'
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)',
+                transition: 'border-color 0.1s ease'
               }} />
+              {/* Green flash overlay on successful scan */}
+              {scanFlash && (
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'rgba(34,197,94,0.22)',
+                  borderRadius: '10px', pointerEvents: 'none'
+                }} />
+              )}
             </div>
 
-            {scanning && (
-              <p style={{ color: 'var(--green)', fontSize: '0.85rem', marginTop: '10px', fontWeight: 600 }}>
-                Scanning… hold barcode steady inside the frame
-              </p>
-            )}
+            {/* Status line below viewfinder */}
+            <div style={{ minHeight: '36px', marginTop: '10px', display: 'flex', justifyContent: 'center' }}>
+              {detectedCode ? (
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '8px',
+                  background: '#f0fdf4', border: '1.5px solid #86efac',
+                  borderRadius: '8px', padding: '6px 16px'
+                }}>
+                  <span style={{ fontSize: '1.1rem' }}>✅</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#15803d', fontSize: '0.95rem' }}>
+                    {detectedCode}
+                  </span>
+                  {processing && (
+                    <span style={{ color: '#64748b', fontSize: '0.82rem', marginLeft: '4px' }}>processing…</span>
+                  )}
+                </div>
+              ) : scanning ? (
+                <p style={{ color: '#64748b', fontSize: '0.85rem', margin: 0, alignSelf: 'center' }}>
+                  Scanning — hold barcode steady inside the frame
+                </p>
+              ) : null}
+            </div>
 
             {/* Camera selector (only show if multiple cameras) */}
             {cameras.length > 1 && (
@@ -362,10 +418,6 @@ export default function ProcessReturns() {
                   ))}
                 </select>
               </div>
-            )}
-
-            {processing && (
-              <p style={{ color: '#6366f1', fontWeight: 600, marginTop: '8px' }}>Processing return…</p>
             )}
           </div>
         )}

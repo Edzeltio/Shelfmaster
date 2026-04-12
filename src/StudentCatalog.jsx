@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import StudentNavbar from './StudentNavbar';
 import Toast from './Toast';
 
 export default function StudentCatalog() {
+  const [searchParams] = useSearchParams();
   const [books, setBooks] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [sortBy, setSortBy] = useState('title-asc');
   const [loading, setLoading] = useState(true);

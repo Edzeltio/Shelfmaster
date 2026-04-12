@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
 import { supabaseAdmin } from './supabaseAdmin';
 
 export default function UserManagement() {
@@ -18,7 +17,7 @@ export default function UserManagement() {
 
   async function fetchUsers() {
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('users')
       .select('*, transactions (id, status)')
       .eq('role', 'student')

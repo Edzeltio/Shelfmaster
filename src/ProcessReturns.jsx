@@ -349,11 +349,11 @@ export default function ProcessReturns() {
                 ? '0 0 0 4px #22c55e, 0 0 28px 8px rgba(34,197,94,0.45)'
                 : '0 0 0 3px #94a3b8',
               transition: 'box-shadow 0.1s ease',
-              background: '#000', width: '100%'
+              background: '#000', width: '360px', maxWidth: '100%', margin: '0 auto'
             }}>
               <video
                 ref={videoRef}
-                style={{ display: 'block', width: '100%', maxWidth: '100%', borderRadius: '10px' }}
+                style={{ display: 'block', width: '100%', borderRadius: '10px' }}
                 muted
                 playsInline
               />
@@ -439,7 +439,7 @@ export default function ProcessReturns() {
               onChange={(e) => setBarcode(e.target.value)}
               disabled={processing}
               style={{
-                flex: 1, padding: '14px 18px', fontSize: '1.05rem', borderRadius: '8px',
+                flex: 1, padding: '18px 24px', fontSize: '1.4rem', borderRadius: '10px',
                 border: '2px solid #cbd5e1', outline: 'none', fontFamily: 'monospace'
               }}
               autoFocus
@@ -448,9 +448,10 @@ export default function ProcessReturns() {
               type="submit"
               disabled={processing || !barcode}
               style={{
-                padding: '0 22px', background: 'var(--maroon)', color: 'white',
-                border: 'none', borderRadius: '8px', fontSize: '1.05rem',
-                fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer'
+                padding: '0 32px', background: 'var(--maroon)', color: 'white',
+                border: 'none', borderRadius: '10px', fontSize: '1.4rem',
+                fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer',
+                whiteSpace: 'nowrap'
               }}
             >
               {processing ? '…' : 'Return'}

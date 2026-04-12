@@ -14,6 +14,14 @@ export default function LibrarianDashboard() {
 
   useEffect(() => {
     fetchDashboardData();
+
+    const channel = supabase
+      .channel('dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, fetchDashboardData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'books' }, fetchDashboardData)
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
   }, []);
 
   async function fetchDashboardData() {

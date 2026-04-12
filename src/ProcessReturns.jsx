@@ -34,6 +34,7 @@ export default function ProcessReturns() {
   const readerRef = useRef(null);
   const lastScannedRef = useRef('');
   const processingRef = useRef(false);
+  const debounceRef = useRef(null);
 
   const showToast = (message, type = 'success') => setToast({ message, type });
 
@@ -68,9 +69,12 @@ export default function ProcessReturns() {
     return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
-  // Stop camera when component unmounts
+  // Stop camera and clear debounce on unmount
   useEffect(() => {
-    return () => stopCamera();
+    return () => {
+      stopCamera();
+      clearTimeout(debounceRef.current);
+    };
   }, []);
 
   // Start scanning only AFTER the video element is in the DOM (cameraOpen → render → effect runs)
@@ -435,11 +439,24 @@ export default function ProcessReturns() {
               type="text"
               placeholder="Scan or type barcode (e.g. LIB-2026-000001)"
               value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setBarcode(val);
+                clearTimeout(debounceRef.current);
+                if (val.trim()) {
+                  debounceRef.current = setTimeout(() => {
+                    if (!processingRef.current && val.trim()) {
+                      e.target.form.requestSubmit();
+                    }
+                  }, 600);
+                }
+              }}
               disabled={processing}
               style={{
                 flex: 1, padding: '18px 24px', fontSize: '1.4rem', borderRadius: '10px',
-                border: '2px solid #cbd5e1', outline: 'none', fontFamily: 'monospace'
+                border: `2px solid ${processing ? '#a3e635' : '#cbd5e1'}`,
+                outline: 'none', fontFamily: 'monospace',
+                transition: 'border-color 0.2s'
               }}
               autoFocus
             />
@@ -447,13 +464,13 @@ export default function ProcessReturns() {
               type="submit"
               disabled={processing || !barcode}
               style={{
-                padding: '0 32px', background: 'var(--maroon)', color: 'white',
-                border: 'none', borderRadius: '10px', fontSize: '1.4rem',
+                padding: '0 28px', background: processing ? '#64748b' : 'var(--maroon)', color: 'white',
+                border: 'none', borderRadius: '10px', fontSize: '1.1rem',
                 fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap', transition: 'background 0.2s'
               }}
             >
-              {processing ? '…' : 'Return'}
+              {processing ? 'Processing…' : 'Return'}
             </button>
           </form>
         )}

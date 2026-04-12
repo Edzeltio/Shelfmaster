@@ -1,18 +1,78 @@
-import React from 'react';
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 
 export default function LibrarianLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [pendingCount, setPendingCount] = useState(0);
+  const prevCountRef = useRef(0);
+  const notifPermission = useRef(Notification.permission);
+
+  // Request browser notification permission on first load
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission().then(p => {
+        notifPermission.current = p;
+      });
+    }
+  }, []);
+
+  // Fetch count + subscribe to real-time inserts on transactions
+  useEffect(() => {
+    fetchPendingCount();
+
+    const channel = supabase
+      .channel('pending-requests-badge')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        () => fetchPendingCount()
+      )
+      .subscribe();
+
+    return () => supabase.removeChannel(channel);
+  }, []);
+
+  async function fetchPendingCount() {
+    const { count, error } = await supabase
+      .from('transactions')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    if (!error) {
+      const newCount = count || 0;
+
+      // Fire browser notification only when count increases
+      if (newCount > prevCountRef.current) {
+        const added = newCount - prevCountRef.current;
+        fireNotification(added);
+      }
+
+      prevCountRef.current = newCount;
+      setPendingCount(newCount);
+    }
+  }
+
+  function fireNotification(added) {
+    if (notifPermission.current !== 'granted') return;
+    new Notification('ShelfMaster — New Borrow Request', {
+      body: `${added} new borrow request${added > 1 ? 's' : ''} waiting for your approval.`,
+      icon: '/logo.png',
+      badge: '/logo.png',
+    });
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/login');
   };
 
+  const isOnRequestsPage = location.pathname === '/librarian/requests';
+
   return (
     <div className="admin-layout">
-      
+
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="sidebar-header">
@@ -25,12 +85,38 @@ export default function LibrarianLayout() {
           <Link to="/librarian/dashboard" className="sidebar-link">Dashboard</Link>
           <Link to="/librarian/inventory" className="sidebar-link">Inventory</Link>
           <Link to="/librarian/users" className="sidebar-link">User Management</Link>
-          <Link to="/librarian/requests" className="sidebar-link">Pending Requests</Link>
+
+          {/* Pending Requests with live badge */}
+          <Link
+            to="/librarian/requests"
+            className="sidebar-link"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+          >
+            <span>Pending Requests</span>
+            {pendingCount > 0 && (
+              <span style={{
+                background: isOnRequestsPage ? 'rgba(255,255,255,0.3)' : '#ef4444',
+                color: 'white',
+                fontSize: '0.7rem',
+                fontWeight: 800,
+                borderRadius: '999px',
+                minWidth: '20px',
+                height: '20px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '0 6px',
+                marginLeft: '8px',
+                lineHeight: 1,
+                animation: isOnRequestsPage ? 'none' : 'pulse-badge 1.5s infinite',
+              }}>
+                {pendingCount > 99 ? '99+' : pendingCount}
+              </span>
+            )}
+          </Link>
+
           <Link to="/librarian/returns" className="sidebar-link">Process Returns</Link>
-          
-          {/* NEW: Borrowing History Link */}
           <Link to="/librarian/history" className="sidebar-link">Borrowing History</Link>
-          
           <Link to="/librarian/settings" className="sidebar-link">Settings</Link>
         </nav>
 
@@ -41,10 +127,16 @@ export default function LibrarianLayout() {
 
       {/* MAIN CONTENT AREA */}
       <main className="admin-content">
-        {/* This renders the specific page based on the route (Dashboard, History, etc.) */}
-        <Outlet /> 
+        <Outlet />
       </main>
 
+      {/* Pulse animation for badge */}
+      <style>{`
+        @keyframes pulse-badge {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.15); opacity: 0.85; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -73,6 +73,17 @@ export default function ProcessReturns() {
     return () => stopCamera();
   }, []);
 
+  // Start scanning only AFTER the video element is in the DOM (cameraOpen → render → effect runs)
+  useEffect(() => {
+    if (cameraOpen && selectedCamera) {
+      // Small delay ensures React has flushed the DOM and the <video> ref is attached
+      const t = setTimeout(() => {
+        if (videoRef.current) startScanning(selectedCamera);
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [cameraOpen, selectedCamera]);
+
   async function fetchRecentReturns() {
     let { data, error } = await supabaseAdmin
       .from('transactions')
@@ -100,12 +111,10 @@ export default function ProcessReturns() {
 
   async function openCamera() {
     setCameraError('');
-    setCameraOpen(true);
     try {
       const deviceList = await BrowserMultiFormatReader.listVideoInputDevices();
       if (!deviceList || deviceList.length === 0) {
         setCameraError('No camera found on this device.');
-        setCameraOpen(false);
         return;
       }
       setCameras(deviceList);
@@ -113,10 +122,10 @@ export default function ProcessReturns() {
       const back = deviceList.find(d => /back|rear|environment/i.test(d.label));
       const chosen = back?.deviceId || deviceList[deviceList.length - 1].deviceId;
       setSelectedCamera(chosen);
-      startScanning(chosen);
+      // setCameraOpen AFTER selectedCamera is set so the useEffect picks up both together
+      setCameraOpen(true);
     } catch (err) {
       setCameraError('Camera access denied. Please allow camera permission and try again.');
-      setCameraOpen(false);
     }
   }
 
@@ -170,7 +179,7 @@ export default function ProcessReturns() {
   async function switchCamera(deviceId) {
     stopCamera();
     setSelectedCamera(deviceId);
-    setTimeout(() => startScanning(deviceId), 300);
+    // useEffect will re-trigger startScanning when selectedCamera changes
   }
 
   const handleBarcodeDetected = useCallback(async (scanned) => {

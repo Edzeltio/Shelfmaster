@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BrowserMultiFormatReader } from '@zxing/browser';
 import { supabase } from './supabaseClient';
 import { supabaseAdmin } from './supabaseAdmin';
 import Toast from './Toast';
@@ -20,8 +21,19 @@ export default function ProcessReturns() {
   const [processing, setProcessing] = useState(false);
   const [recentReturns, setRecentReturns] = useState([]);
   const [toast, setToast] = useState({ message: '', type: 'success' });
-  const showToast = (message, type = 'success') => setToast({ message, type });
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraError, setCameraError] = useState('');
+  const [cameras, setCameras] = useState([]);
+  const [selectedCamera, setSelectedCamera] = useState('');
+  const [scanning, setScanning] = useState(false);
+
   const inputRef = useRef(null);
+  const videoRef = useRef(null);
+  const readerRef = useRef(null);
+  const lastScannedRef = useRef('');
+  const processingRef = useRef(false);
+
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     fetchRecentReturns();
@@ -29,6 +41,11 @@ export default function ProcessReturns() {
     const onVisible = () => { if (!document.hidden) fetchRecentReturns(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
+  // Stop camera when component unmounts
+  useEffect(() => {
+    return () => stopCamera();
   }, []);
 
   async function fetchRecentReturns() {
@@ -56,12 +73,111 @@ export default function ProcessReturns() {
     if (data) setRecentReturns(data);
   }
 
+  async function openCamera() {
+    setCameraError('');
+    setCameraOpen(true);
+    try {
+      const deviceList = await BrowserMultiFormatReader.listVideoInputDevices();
+      if (!deviceList || deviceList.length === 0) {
+        setCameraError('No camera found on this device.');
+        setCameraOpen(false);
+        return;
+      }
+      setCameras(deviceList);
+      // Prefer back camera on mobile
+      const back = deviceList.find(d => /back|rear|environment/i.test(d.label));
+      const chosen = back?.deviceId || deviceList[deviceList.length - 1].deviceId;
+      setSelectedCamera(chosen);
+      startScanning(chosen);
+    } catch (err) {
+      setCameraError('Camera access denied. Please allow camera permission and try again.');
+      setCameraOpen(false);
+    }
+  }
+
+  function stopCamera() {
+    if (readerRef.current) {
+      try { readerRef.current.reset(); } catch (_) {}
+      readerRef.current = null;
+    }
+    setScanning(false);
+  }
+
+  function closeCamera() {
+    stopCamera();
+    setCameraOpen(false);
+    setCameraError('');
+    if (inputRef.current) inputRef.current.focus();
+  }
+
+  async function startScanning(deviceId) {
+    setScanning(true);
+    const codeReader = new BrowserMultiFormatReader();
+    readerRef.current = codeReader;
+    lastScannedRef.current = '';
+
+    try {
+      await codeReader.decodeFromVideoDevice(
+        deviceId || selectedCamera,
+        videoRef.current,
+        (result, err) => {
+          if (result) {
+            const text = result.getText();
+            // Debounce: ignore same code within 2 seconds
+            if (text === lastScannedRef.current) return;
+            if (processingRef.current) return;
+            lastScannedRef.current = text;
+            setTimeout(() => { lastScannedRef.current = ''; }, 2000);
+            handleBarcodeDetected(text);
+          }
+        }
+      );
+    } catch (err) {
+      // NotFoundException fires normally when no barcode is in frame — ignore it
+      if (err?.name !== 'NotFoundException') {
+        setCameraError('Camera error: ' + (err.message || 'Could not start scanner.'));
+        setCameraOpen(false);
+        setScanning(false);
+      }
+    }
+  }
+
+  async function switchCamera(deviceId) {
+    stopCamera();
+    setSelectedCamera(deviceId);
+    setTimeout(() => startScanning(deviceId), 300);
+  }
+
+  const handleBarcodeDetected = useCallback(async (scanned) => {
+    if (!scanned) return;
+    processingRef.current = true;
+    setProcessing(true);
+    setBarcode(scanned);
+
+    try {
+      await processReturn(scanned);
+    } finally {
+      processingRef.current = false;
+      setProcessing(false);
+      setBarcode('');
+    }
+  }, []);
+
   const handleScanSubmit = async (e) => {
     e.preventDefault();
     const scanned = barcode.trim();
     if (!scanned) return;
     setProcessing(true);
+    try {
+      await processReturn(scanned);
+    } finally {
+      setProcessing(false);
+      setBarcode('');
+      if (inputRef.current) inputRef.current.focus();
+    }
+  };
 
+  async function processReturn(scanned) {
     try {
       // Strategy 1: Look up by copy accession_id (new per-copy system)
       const { data: copy, error: copyError } = await supabaseAdmin
@@ -70,11 +186,9 @@ export default function ProcessReturns() {
         .eq('accession_id', scanned)
         .maybeSingle();
 
-      // If book_copies table doesn't exist yet, skip to legacy fallback
       if (copyError && isMigrationError(copyError)) {
-        // fall through to strategy 2 below
+        // fall through to strategy 2
       } else if (copy) {
-        // Found a specific physical copy
         if (copy.status !== 'borrowed') {
           throw new Error(`Copy ${copy.accession_id} is not currently marked as borrowed. Its status is: "${copy.status}".`);
         }
@@ -89,7 +203,7 @@ export default function ProcessReturns() {
 
         if (transError) throw new Error(`Database error: ${transError.message}`);
         if (!transactions || transactions.length === 0) {
-          throw new Error(`No active loan found linked to copy ${copy.accession_id}. The copy may have been marked borrowed manually.`);
+          throw new Error(`No active loan found linked to copy ${copy.accession_id}.`);
         }
 
         const transaction = transactions[0];
@@ -106,7 +220,6 @@ export default function ProcessReturns() {
           .eq('id', copy.id);
         if (updateCopyError) throw updateCopyError;
 
-        // Increment available quantity on books table
         const { data: bookData } = await supabaseAdmin
           .from('books')
           .select('quantity')
@@ -119,11 +232,7 @@ export default function ProcessReturns() {
             .eq('id', copy.book_id);
         }
 
-        showToast(
-          `✅ Copy ${copy.accession_id} returned by ${transaction.users?.name}. Copy marked available.`,
-          'success'
-        );
-        setBarcode('');
+        showToast(`Copy ${copy.accession_id} returned by ${transaction.users?.name}. Marked available.`, 'success');
         fetchRecentReturns();
         return;
       }
@@ -136,7 +245,7 @@ export default function ProcessReturns() {
         .maybeSingle();
 
       if (bookError || !book) {
-        throw new Error(`Barcode "${scanned}" not found. Make sure you are scanning a copy accession label (e.g. LIB-2026-000001).`);
+        throw new Error(`Barcode "${scanned}" not found. Make sure you are scanning a valid copy label (e.g. LIB-2026-000001).`);
       }
 
       const { data: transactions, error: transError } = await supabaseAdmin
@@ -167,17 +276,12 @@ export default function ProcessReturns() {
       if (updateBookError) throw updateBookError;
 
       showToast(`"${book.title}" returned by ${transaction.users?.name}. Stock updated.`, 'success');
-      setBarcode('');
       fetchRecentReturns();
 
     } catch (err) {
       showToast(err.message, 'error');
-      setBarcode('');
-    } finally {
-      setProcessing(false);
-      if (inputRef.current) inputRef.current.focus();
     }
-  };
+  }
 
   return (
     <div style={{ maxWidth: '900px' }}>
@@ -186,38 +290,146 @@ export default function ProcessReturns() {
       <div style={{ marginBottom: '2rem' }}>
         <h1 style={{ color: 'var(--dark-blue)', margin: 0 }}>Process Returns</h1>
         <p style={{ color: '#64748b', marginTop: '5px' }}>
-          Scan a book's individual copy barcode (e.g. <code style={{ background: '#eef2ff', color: '#6366f1', padding: '2px 6px', borderRadius: '4px' }}>LIB-2026-000001</code>) to check it back in.
+          Scan a book's individual copy barcode (e.g.{' '}
+          <code style={{ background: '#eef2ff', color: '#6366f1', padding: '2px 6px', borderRadius: '4px' }}>
+            LIB-2026-000001
+          </code>
+          ) to check it back in.
         </p>
       </div>
 
-      <div style={{ background: 'white', padding: '3rem', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--green)', marginBottom: '2rem', textAlign: 'center' }}>
-        <h2 style={{ color: '#334155', margin: '0 0 8px 0' }}>Ready to Scan</h2>
+      {/* Scanner card */}
+      <div style={{
+        background: 'white', padding: '2rem 3rem 2.5rem', borderRadius: '12px',
+        boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--green)',
+        marginBottom: '2rem', textAlign: 'center'
+      }}>
+        <h2 style={{ color: '#334155', margin: '0 0 6px 0' }}>
+          {cameraOpen ? 'Camera Scanner' : 'Ready to Scan'}
+        </h2>
         <p style={{ color: '#94a3b8', fontSize: '0.85rem', margin: '0 0 20px 0' }}>
-          Scan the barcode label on the book's spine — each physical copy has its own unique ID.
+          {cameraOpen
+            ? 'Point the camera at the barcode on the book spine.'
+            : 'Use a USB scanner or your device camera to read the barcode label.'}
         </p>
 
-        <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '10px', maxWidth: '500px', margin: '0 auto' }}>
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Scan copy barcode (e.g. LIB-2026-000001)"
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            disabled={processing}
-            style={{ flex: 1, padding: '15px 20px', fontSize: '1.1rem', borderRadius: '8px', border: '2px solid #cbd5e1', outline: 'none', fontFamily: 'monospace' }}
-            autoFocus
-          />
-          <button
-            type="submit"
-            disabled={processing || !barcode}
-            style={{ padding: '0 25px', background: 'var(--maroon)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '1.1rem', fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer' }}
-          >
-            {processing ? '...' : 'Return'}
-          </button>
-        </form>
+        {/* Camera viewfinder */}
+        {cameraOpen && (
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{
+              position: 'relative', display: 'inline-block',
+              borderRadius: '12px', overflow: 'hidden',
+              boxShadow: '0 0 0 3px var(--green)', maxWidth: '100%'
+            }}>
+              <video
+                ref={videoRef}
+                style={{ display: 'block', width: '100%', maxWidth: '480px', borderRadius: '10px' }}
+                muted
+                playsInline
+              />
+              {/* Aim reticle */}
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '220px', height: '80px',
+                border: '2px solid rgba(255,255,255,0.7)',
+                borderRadius: '6px', pointerEvents: 'none',
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.3)'
+              }} />
+            </div>
+
+            {scanning && (
+              <p style={{ color: 'var(--green)', fontSize: '0.85rem', marginTop: '10px', fontWeight: 600 }}>
+                Scanning… hold barcode steady inside the frame
+              </p>
+            )}
+
+            {/* Camera selector (only show if multiple cameras) */}
+            {cameras.length > 1 && (
+              <div style={{ marginTop: '10px' }}>
+                <select
+                  value={selectedCamera}
+                  onChange={(e) => switchCamera(e.target.value)}
+                  style={{
+                    padding: '6px 12px', borderRadius: '6px', border: '1px solid #cbd5e1',
+                    fontSize: '0.85rem', color: '#475569', cursor: 'pointer'
+                  }}
+                >
+                  {cameras.map(cam => (
+                    <option key={cam.deviceId} value={cam.deviceId}>
+                      {cam.label || `Camera ${cam.deviceId.slice(0, 8)}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {processing && (
+              <p style={{ color: '#6366f1', fontWeight: 600, marginTop: '8px' }}>Processing return…</p>
+            )}
+          </div>
+        )}
+
+        {cameraError && (
+          <p style={{ color: 'var(--maroon)', fontSize: '0.85rem', marginBottom: '12px' }}>
+            {cameraError}
+          </p>
+        )}
+
+        {/* Text input row */}
+        {!cameraOpen && (
+          <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '10px', maxWidth: '500px', margin: '0 auto 14px' }}>
+            <input
+              ref={inputRef}
+              type="text"
+              placeholder="Scan or type barcode (e.g. LIB-2026-000001)"
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              disabled={processing}
+              style={{
+                flex: 1, padding: '14px 18px', fontSize: '1.05rem', borderRadius: '8px',
+                border: '2px solid #cbd5e1', outline: 'none', fontFamily: 'monospace'
+              }}
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={processing || !barcode}
+              style={{
+                padding: '0 22px', background: 'var(--maroon)', color: 'white',
+                border: 'none', borderRadius: '8px', fontSize: '1.05rem',
+                fontWeight: 'bold', cursor: processing || !barcode ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {processing ? '…' : 'Return'}
+            </button>
+          </form>
+        )}
+
+        {/* Camera toggle button */}
+        <button
+          onClick={cameraOpen ? closeCamera : openCamera}
+          disabled={processing}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            padding: '9px 20px', borderRadius: '8px', cursor: processing ? 'not-allowed' : 'pointer',
+            border: cameraOpen ? '2px solid var(--maroon)' : '2px solid var(--green)',
+            background: cameraOpen ? '#fff1f2' : '#f0fdf4',
+            color: cameraOpen ? 'var(--maroon)' : '#166534',
+            fontWeight: 600, fontSize: '0.9rem', transition: 'all 0.15s'
+          }}
+        >
+          <span style={{ fontSize: '1.1rem' }}>{cameraOpen ? '✕' : '📷'}</span>
+          {cameraOpen ? 'Close Camera' : 'Use Camera Scanner'}
+        </button>
       </div>
 
-      <div style={{ background: 'white', borderRadius: '12px', boxShadow: '0 4px 10px rgba(0,0,0,0.02)', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+      {/* Recent returns table */}
+      <div style={{
+        background: 'white', borderRadius: '12px',
+        boxShadow: '0 4px 10px rgba(0,0,0,0.02)',
+        border: '1px solid #e2e8f0', overflow: 'hidden'
+      }}>
         <h3 style={{ margin: 0, padding: '20px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0', color: '#475569' }}>
           Recently Returned
         </h3>

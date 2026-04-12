@@ -310,7 +310,7 @@ export default function ProcessReturns() {
   }
 
   return (
-    <div style={{ maxWidth: '900px' }}>
+    <div style={{ width: '100%' }}>
       <Toast {...toast} onClose={() => setToast({ message: '' })} />
 
       <div style={{ marginBottom: '2rem' }}>
@@ -328,7 +328,7 @@ export default function ProcessReturns() {
       <div style={{
         background: 'white', padding: '2rem 3rem 2.5rem', borderRadius: '12px',
         boxShadow: '0 4px 15px rgba(0,0,0,0.05)', borderTop: '6px solid var(--green)',
-        marginBottom: '2rem', textAlign: 'center'
+        marginBottom: '2rem', textAlign: 'center', width: '100%', boxSizing: 'border-box'
       }}>
         <h2 style={{ color: '#334155', margin: '0 0 6px 0' }}>
           {cameraOpen ? 'Camera Scanner' : 'Ready to Scan'}
@@ -343,17 +343,17 @@ export default function ProcessReturns() {
         {cameraOpen && (
           <div style={{ marginBottom: '18px' }}>
             <div style={{
-              position: 'relative', display: 'inline-block',
+              position: 'relative', display: 'block',
               borderRadius: '12px', overflow: 'hidden',
               boxShadow: scanFlash
                 ? '0 0 0 4px #22c55e, 0 0 28px 8px rgba(34,197,94,0.45)'
                 : '0 0 0 3px #94a3b8',
               transition: 'box-shadow 0.1s ease',
-              background: '#000', maxWidth: '100%'
+              background: '#000', width: '100%'
             }}>
               <video
                 ref={videoRef}
-                style={{ display: 'block', width: '100%', maxWidth: '480px', borderRadius: '10px' }}
+                style={{ display: 'block', width: '100%', maxWidth: '100%', borderRadius: '10px' }}
                 muted
                 playsInline
               />
@@ -430,7 +430,7 @@ export default function ProcessReturns() {
 
         {/* Text input row */}
         {!cameraOpen && (
-          <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '10px', maxWidth: '500px', margin: '0 auto 14px' }}>
+          <form onSubmit={handleScanSubmit} style={{ display: 'flex', gap: '10px', width: '100%', margin: '0 0 14px' }}>
             <input
               ref={inputRef}
               type="text"

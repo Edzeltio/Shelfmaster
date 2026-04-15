@@ -17,8 +17,8 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 - `src/` — All React source files (flat layout)
   - `main.jsx` — Entry point
   - `App.jsx` — Routing (public, `/student/*`, `/librarian/*`)
-  - `supabaseClient.js` — Supabase anon client
-  - `supabaseAdmin.js` — Supabase service-role client
+  - `supabaseClient.js` — Supabase anon client with graceful missing-secret handling
+  - `supabaseAdmin.js` — Compatibility export that reuses the safe browser Supabase client; service-role keys are not exposed in Vite
   - `BarcodeLabel.jsx` — Barcode label component + helpers (`generateBarcode`, `generateCopyAccessionId`)
   - `Inventory.jsx` — Physical book & eBook management with per-copy system
   - `ProcessReturns.jsx` — Barcode scan to return a specific copy
@@ -32,7 +32,8 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
-- `VITE_SUPABASE_SERVICE_ROLE_KEY`
+
+Do not expose Supabase service-role keys through `VITE_` variables. Browser code uses the anon key only; privileged database access should be enforced with Supabase Row Level Security policies or moved to a server-only endpoint if needed.
 
 ## Database Schema
 
@@ -75,6 +76,11 @@ CREATE POLICY "Allow all for book_copies" ON book_copies
 - **Borrow:** Librarian approves → system assigns the next available copy → links `copy_id` to the transaction
 - **Return:** Staff scans copy barcode → exact copy found → marked available → student's loan closed
 - Inventory page shows expandable copies panel per book title
+
+## Replit Migration Notes
+
+- `.replit` runs `npm run dev` on port 5000 with the Vite server bound to `0.0.0.0` and `allowedHosts: true` for Replit preview compatibility.
+- Missing Supabase secrets no longer crash the app at startup; actions that require Supabase return an explicit configuration error until the secrets are added.
 
 ## Development
 

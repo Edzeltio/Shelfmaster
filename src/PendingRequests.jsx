@@ -27,7 +27,7 @@ export default function PendingRequests() {
   }
 
   async function fetchPendingRequests() {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
       .from('transactions')
       .select(`
         id,

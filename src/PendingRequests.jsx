@@ -104,7 +104,7 @@ export default function PendingRequests() {
       : null;
 
     for (const candidate of candidates) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('transactions')
         .update({
           status: candidate,
@@ -185,7 +185,7 @@ export default function PendingRequests() {
             'success'
           );
         } else {
-          await supabase
+          await supabaseAdmin
             .from('transactions')
             .update({
               status: resolvedStatus,

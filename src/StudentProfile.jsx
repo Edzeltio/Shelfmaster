@@ -44,6 +44,8 @@ export default function StudentProfile() {
     setShowModal(true);
   }
 
+  const sanitizeText = (str) => str.replace(/<[^>]*>/g, '').trim();
+
   async function handleSave(e) {
     e.preventDefault();
     setSaving(true);
@@ -51,9 +53,19 @@ export default function StudentProfile() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setSaving(false); return; }
 
+    const cleanName = sanitizeText(form.name);
+    const cleanStudentId = sanitizeText(form.student_id);
+    const cleanCourseYear = sanitizeText(form.course_year);
+
+    if (!cleanName) {
+      setSaveMsg('Please enter a valid name without HTML tags.');
+      setSaving(false);
+      return;
+    }
+
     const { data: saved, error } = await supabase
       .from('users')
-      .update({ name: form.name, student_id: form.student_id, course_year: form.course_year })
+      .update({ name: cleanName, student_id: cleanStudentId, course_year: cleanCourseYear })
       .eq('auth_id', user.id)
       .select('name, student_id, course_year')
       .maybeSingle();
@@ -67,7 +79,7 @@ export default function StudentProfile() {
       setSaveMsg('⚠️ Save failed: the database did not accept the change. Ask your admin to enable UPDATE access on the users table.');
     } else {
       // Confirmed: database returned the updated row
-      setUserData(prev => ({ ...prev, name: saved.name, student_id: saved.student_id, course_year: saved.course_year }));
+      setUserData(prev => ({ ...prev, name: cleanName, student_id: cleanStudentId, course_year: cleanCourseYear }));
       setSaveMsg('success');
       setTimeout(() => { setShowModal(false); setSaveMsg(''); }, 1000);
     }

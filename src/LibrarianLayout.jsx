@@ -106,7 +106,7 @@ export default function LibrarianLayout() {
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <img src="/logo.png" alt="ShelfMaster" />
+          <img src="/shelfmaster_logo.png" alt="ShelfMaster" />
           <h2 style={{ margin: 0, fontSize: '1.2rem' }}>ShelfMaster</h2>
           <span style={{ fontSize: '0.8rem', color: 'var(--light-blue)' }}>Librarian Portal</span>
         </div>

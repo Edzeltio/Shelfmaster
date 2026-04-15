@@ -15,9 +15,21 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const sanitizeText = (str) => str.replace(/<[^>]*>/g, '').trim();
+
   const handleSignup = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    const cleanName = sanitizeText(formData.name);
+    const cleanStudentId = sanitizeText(formData.student_id);
+    const cleanCourseYear = sanitizeText(formData.course_year);
+
+    if (!cleanName || !cleanStudentId || !cleanCourseYear) {
+      alert('Please enter valid text without HTML tags.');
+      setLoading(false);
+      return;
+    }
 
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -32,9 +44,9 @@ export default function Signup() {
           .from('users')
           .insert([{
             auth_id: authData.user.id,
-            name: formData.name,
-            student_id: formData.student_id,
-            course_year: formData.course_year,
+            name: cleanName,
+            student_id: cleanStudentId,
+            course_year: cleanCourseYear,
             role: formData.role,
             status: 'active'
           }]);

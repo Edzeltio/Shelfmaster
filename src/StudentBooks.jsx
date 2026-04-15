@@ -33,19 +33,19 @@ export default function StudentBooks() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data: userData, error: userError } = await supabaseAdmin
+    const { data: userData, error: userError } = await supabase
       .from('users').select('id').eq('auth_id', user.id).maybeSingle();
     if (userError) console.error('User lookup error:', userError);
     const userId = userData?.id;
     if (!userId) { setLoading(false); return; }
 
     let [loansRes, requestsRes] = await Promise.all([
-      supabaseAdmin
+      supabase
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num), book_copies(accession_id, copy_number)')
         .eq('user_id', userId)
         .in('status', ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out']),
-      supabaseAdmin
+      supabase
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
         .eq('user_id', userId)
@@ -53,7 +53,7 @@ export default function StudentBooks() {
     ]);
 
     if (loansRes.error && isMigrationError(loansRes.error)) {
-      loansRes = await supabaseAdmin
+      loansRes = await supabase
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
         .eq('user_id', userId)

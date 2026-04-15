@@ -5,7 +5,7 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 ## Tech Stack
 
 - **Frontend:** React 19, React Router DOM v7
-- **Build Tool:** Vite 8 (port 5000)
+- **Build Tool:** Vite 8 served through a small Express wrapper on port 5000
 - **Backend/Database:** Supabase (PostgreSQL + Auth)
 - **Charts:** Recharts
 - **Barcodes:** react-barcode, jsbarcode
@@ -14,13 +14,14 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 
 ## Project Structure
 
+- `server.js` — Express server that hosts the Vite app and provides server-only privileged archive endpoint
 - `src/` — All React source files (flat layout)
   - `main.jsx` — Entry point
   - `App.jsx` — Routing (public, `/student/*`, `/librarian/*`)
   - `supabaseClient.js` — Supabase anon client with graceful missing-secret handling
   - `supabaseAdmin.js` — Compatibility export that reuses the safe browser Supabase client; service-role keys are not exposed in Vite
   - `BarcodeLabel.jsx` — Barcode label component + helpers (`generateBarcode`, `generateCopyAccessionId`)
-  - `Inventory.jsx` — Physical book & eBook management with per-copy system
+  - `Inventory.jsx` — Physical book & eBook management with per-copy system; archive calls server endpoint
   - `ProcessReturns.jsx` — Barcode scan to return a specific copy
   - `PendingRequests.jsx` — Approve/decline borrow requests, assigns specific copies
   - `BorrowingHistory.jsx` — Full transaction log with copy accession IDs
@@ -30,10 +31,14 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 
 ## Environment Variables (stored in Replit Secrets)
 
+Client-side Supabase access:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 
-Do not expose Supabase service-role keys through `VITE_` variables. Browser code uses the anon key only; privileged database access should be enforced with Supabase Row Level Security policies or moved to a server-only endpoint if needed.
+Server-only privileged actions:
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+For backward compatibility during import, `server.js` can also read `VITE_SUPABASE_SERVICE_ROLE_KEY` on the server, but service-role keys should be moved to `SUPABASE_SERVICE_ROLE_KEY` and never exposed to browser code.
 
 ## Database Schema
 
@@ -79,8 +84,9 @@ CREATE POLICY "Allow all for book_copies" ON book_copies
 
 ## Replit Migration Notes
 
-- `.replit` runs `npm run dev` on port 5000 with the Vite server bound to `0.0.0.0` and `allowedHosts: true` for Replit preview compatibility.
-- Missing Supabase secrets no longer crash the app at startup; actions that require Supabase return an explicit configuration error until the secrets are added.
+- `.replit` runs `npm run dev` on port 5000; that script now starts `server.js`, which serves Vite in development and the built `dist` files in production.
+- Missing Supabase client secrets no longer crash the app at startup; actions that require Supabase return an explicit configuration error until the secrets are added.
+- The archive action uses `/api/books/:id/archive` so Row Level Security is bypassed only on the server after verifying the requester is a librarian.
 
 ## Development
 

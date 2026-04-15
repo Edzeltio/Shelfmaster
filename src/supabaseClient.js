@@ -51,6 +51,7 @@ function createUnavailableClient() {
     },
     auth: {
       getUser: async () => ({ data: { user: null }, error: null }),
+      getSession: async () => ({ data: { session: null }, error: null }),
       signInWithPassword: async () => ({ data: { user: null, session: null }, error: missingConfigError }),
       signUp: async () => ({ data: { user: null, session: null }, error: missingConfigError }),
       signOut: async () => ({ error: null }),

@@ -207,9 +207,31 @@ export default function Inventory() {
   const handleArchive = async (book) => {
     const confirmed = window.confirm(`Archive "${book.title}"? It will be hidden from the catalog.`);
     if (confirmed) {
-      const { error } = await supabase.from('books').update({ status: 'archived' }).eq('id', book.id);
-      if (error) alert('Archive failed: ' + error.message);
-      else fetchInventory();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+
+      if (!token) {
+        alert('Archive failed: please sign in again.');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/books/${book.id}/archive`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Archive failed.');
+        }
+
+        fetchInventory();
+      } catch (error) {
+        alert('Archive failed: ' + error.message);
+      }
     }
   };
 

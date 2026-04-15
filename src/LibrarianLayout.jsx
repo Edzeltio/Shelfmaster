@@ -6,8 +6,30 @@ export default function LibrarianLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [pendingCount, setPendingCount] = useState(0);
+  const [authChecked, setAuthChecked] = useState(false);
   const prevCountRef = useRef(0);
   const notifPermission = useRef(Notification.permission);
+
+  // Guard: verify session and librarian role before rendering
+  useEffect(() => {
+    async function verifyLibrarian() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { navigate('/login', { replace: true }); return; }
+
+      const { data } = await supabase
+        .from('users')
+        .select('role')
+        .eq('auth_id', user.id)
+        .maybeSingle();
+
+      if (!data || data.role !== 'librarian') {
+        navigate('/login', { replace: true });
+        return;
+      }
+      setAuthChecked(true);
+    }
+    verifyLibrarian();
+  }, [navigate]);
 
   // Request browser notification permission on first load
   useEffect(() => {
@@ -69,6 +91,14 @@ export default function LibrarianLayout() {
   };
 
   const isOnRequestsPage = location.pathname === '/librarian/requests';
+
+  if (!authChecked) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <p style={{ color: '#94a3b8' }}>Verifying session...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="admin-layout">

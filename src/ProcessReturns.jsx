@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/browser';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import Toast from './Toast';
 
 function isMigrationError(error) {
@@ -89,7 +89,7 @@ export default function ProcessReturns() {
   }, [cameraOpen, selectedCamera]);
 
   async function fetchRecentReturns() {
-    let { data, error } = await supabaseAdmin
+    let { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id,
@@ -103,7 +103,7 @@ export default function ProcessReturns() {
       .limit(10);
 
     if (error && isMigrationError(error)) {
-      ({ data, error } = await supabaseAdmin
+      ({ data, error } = await localDbAdmin
         .from('transactions')
         .select('id, return_date, users (name, student_id), books (title)')
         .eq('status', 'returned')
@@ -219,7 +219,7 @@ export default function ProcessReturns() {
   async function processReturn(scanned) {
     try {
       // Strategy 1: Look up by copy accession_id (new per-copy system)
-      const { data: copy, error: copyError } = await supabaseAdmin
+      const { data: copy, error: copyError } = await localDbAdmin
         .from('book_copies')
         .select('id, book_id, accession_id, copy_number, status')
         .eq('accession_id', scanned)
@@ -232,7 +232,7 @@ export default function ProcessReturns() {
           throw new Error(`Copy ${copy.accession_id} is not currently marked as borrowed. Its status is: "${copy.status}".`);
         }
 
-        const { data: transactions, error: transError } = await supabaseAdmin
+        const { data: transactions, error: transError } = await localDbAdmin
           .from('transactions')
           .select('id, user_id, users(name), books(title)')
           .eq('copy_id', copy.id)
@@ -247,25 +247,25 @@ export default function ProcessReturns() {
 
         const transaction = transactions[0];
 
-        const { error: updateTransError } = await supabaseAdmin
+        const { error: updateTransError } = await localDbAdmin
           .from('transactions')
           .update({ status: 'returned', return_date: new Date().toISOString() })
           .eq('id', transaction.id);
         if (updateTransError) throw updateTransError;
 
-        const { error: updateCopyError } = await supabaseAdmin
+        const { error: updateCopyError } = await localDbAdmin
           .from('book_copies')
           .update({ status: 'available' })
           .eq('id', copy.id);
         if (updateCopyError) throw updateCopyError;
 
-        const { data: bookData } = await supabaseAdmin
+        const { data: bookData } = await localDbAdmin
           .from('books')
           .select('quantity')
           .eq('id', copy.book_id)
           .single();
         if (bookData) {
-          await supabaseAdmin
+          await localDbAdmin
             .from('books')
             .update({ quantity: (bookData.quantity || 0) + 1 })
             .eq('id', copy.book_id);
@@ -277,7 +277,7 @@ export default function ProcessReturns() {
       }
 
       // Strategy 2: Fall back to legacy per-book barcode scan
-      const { data: book, error: bookError } = await supabaseAdmin
+      const { data: book, error: bookError } = await localDbAdmin
         .from('books')
         .select('id, title, quantity')
         .eq('barcode', scanned)
@@ -287,7 +287,7 @@ export default function ProcessReturns() {
         throw new Error(`Barcode "${scanned}" not found. Make sure you are scanning a valid copy label (e.g. LIB-2026-000001).`);
       }
 
-      const { data: transactions, error: transError } = await supabaseAdmin
+      const { data: transactions, error: transError } = await localDbAdmin
         .from('transactions')
         .select('id, user_id, users(name)')
         .eq('book_id', book.id)
@@ -302,13 +302,13 @@ export default function ProcessReturns() {
 
       const transaction = transactions[0];
 
-      const { error: updateTransError } = await supabaseAdmin
+      const { error: updateTransError } = await localDbAdmin
         .from('transactions')
         .update({ status: 'returned', return_date: new Date().toISOString() })
         .eq('id', transaction.id);
       if (updateTransError) throw updateTransError;
 
-      const { error: updateBookError } = await supabaseAdmin
+      const { error: updateBookError } = await localDbAdmin
         .from('books')
         .update({ quantity: book.quantity + 1 })
         .eq('id', book.id);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 export default function Settings() {
   const [formData, setFormData] = useState({
@@ -25,7 +25,7 @@ export default function Settings() {
   async function fetchContent() {
     setLoading(true);
     // Fetch the first row of settings
-    const { data, error } = await supabase.from('site_content').select('*').limit(1).single();
+    const { data, error } = await localDb.from('site_content').select('*').limit(1).single();
     
     if (data) {
       setFormData(data);
@@ -45,14 +45,14 @@ export default function Settings() {
 
     if (formData.id) {
       // Update existing row
-      const { error: updateError } = await supabase
+      const { error: updateError } = await localDb
         .from('site_content')
         .update(formData)
         .eq('id', formData.id);
       error = updateError;
     } else {
       // Insert new row if table was empty
-      const { error: insertError } = await supabase
+      const { error: insertError } = await localDb
         .from('site_content')
         .insert([{ ...formData, id: 1 }]);
       error = insertError;

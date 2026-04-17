@@ -1,30 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import BarcodeLabel, { generateBarcode, generateCopyAccessionId } from './BarcodeLabel';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
 
 const MIGRATION_SQL =
-`-- Run this once in your Supabase SQL Editor:
+`-- The Express server creates this table automatically when XAMPP MySQL is running.
+-- If you prefer manual setup, import xampp_schema.sql in phpMyAdmin.
 
 CREATE TABLE IF NOT EXISTS book_copies (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-  copy_number INTEGER NOT NULL DEFAULT 1,
-  accession_id TEXT UNIQUE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'available'
-    CHECK (status IN ('available', 'borrowed', 'damaged', 'lost')),
+  id VARCHAR(36) PRIMARY KEY,
+  book_id VARCHAR(36) NOT NULL,
+  copy_number INT NOT NULL DEFAULT 1,
+  accession_id VARCHAR(100) NOT NULL UNIQUE,
+  status VARCHAR(50) NOT NULL DEFAULT 'available',
   date_acquired DATE,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE transactions
-  ADD COLUMN IF NOT EXISTS copy_id UUID REFERENCES book_copies(id);
-
-ALTER TABLE book_copies ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all for book_copies" ON book_copies
-  FOR ALL USING (true) WITH CHECK (true);`;
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (book_id),
+  CONSTRAINT fk_book_copies_book FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+);`;
 
 const nullableNumberFields = ['pages', 'cost_price', 'quantity'];
 
@@ -97,7 +92,7 @@ export default function Inventory() {
   }, []);
 
   async function checkMigration() {
-    const { error } = await supabaseAdmin
+    const { error } = await localDbAdmin
       .from('book_copies')
       .select('id')
       .limit(1);
@@ -112,7 +107,7 @@ export default function Inventory() {
   }
 
   async function checkCoverColumn() {
-    const { error } = await supabaseAdmin
+    const { error } = await localDbAdmin
       .from('books')
       .select('cover_image')
       .limit(1);
@@ -120,7 +115,7 @@ export default function Inventory() {
   }
 
   async function fetchInventory() {
-    const { data, error } = await supabase
+    const { data, error } = await localDb
       .from('books')
       .select('*')
       .neq('status', 'archived')
@@ -134,7 +129,7 @@ export default function Inventory() {
   }
 
   async function getNextCopyNumber() {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await localDbAdmin
       .from('book_copies')
       .select('accession_id')
       .order('accession_id', { ascending: false })
@@ -156,13 +151,13 @@ export default function Inventory() {
       status: 'available',
       date_acquired: dateAcquired || new Date().toISOString().split('T')[0],
     }));
-    const { error } = await supabaseAdmin.from('book_copies').insert(copies);
+    const { error } = await localDbAdmin.from('book_copies').insert(copies);
     if (error) throw error;
   }
 
   async function fetchCopiesForBook(bookId) {
     setCopiesLoading(true);
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await localDbAdmin
       .from('book_copies')
       .select('*')
       .eq('book_id', bookId)
@@ -184,7 +179,7 @@ export default function Inventory() {
 
   const openAddModal = async () => {
     setIsEditing(false);
-    const { data } = await supabase
+    const { data } = await localDb
       .from('books')
       .select('accession_num')
       .order('accession_num', { ascending: false })
@@ -224,7 +219,7 @@ export default function Inventory() {
   const handleArchive = async (book) => {
     const confirmed = window.confirm(`Archive "${book.title}"? It will be hidden from the catalog.`);
     if (confirmed) {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await localDb.auth.getSession();
       const token = sessionData?.session?.access_token;
 
       if (!token) {
@@ -253,7 +248,7 @@ export default function Inventory() {
   };
 
   async function getSessionToken() {
-    const { data: sessionData } = await supabase.auth.getSession();
+    const { data: sessionData } = await localDb.auth.getSession();
     return sessionData?.session?.access_token;
   }
 
@@ -289,8 +284,8 @@ export default function Inventory() {
     if (coverFile) {
       const ext = coverFile.name.split('.').pop().toLowerCase();
       const filename = `covers/${Date.now()}-${formData.accession_num}.${ext}`;
-      await supabaseAdmin.storage.createBucket('book-covers', { public: true }).catch(() => {});
-      const { error: upErr } = await supabaseAdmin.storage
+      await localDbAdmin.storage.createBucket('book-covers', { public: true }).catch(() => {});
+      const { error: upErr } = await localDbAdmin.storage
         .from('book-covers')
         .upload(filename, coverFile, { upsert: true, contentType: coverFile.type });
       if (upErr) {
@@ -298,7 +293,7 @@ export default function Inventory() {
         setLoading(false);
         return;
       }
-      const { data: urlData } = supabaseAdmin.storage.from('book-covers').getPublicUrl(filename);
+      const { data: urlData } = localDbAdmin.storage.from('book-covers').getPublicUrl(filename);
       coverUrl = urlData.publicUrl;
     }
 
@@ -308,7 +303,7 @@ export default function Inventory() {
       : formWithoutCover);
 
     if (isEditing) {
-      const { error } = await supabase.from('books').update(bookPayload).eq('id', currentBookId);
+      const { error } = await localDb.from('books').update(bookPayload).eq('id', currentBookId);
       if (error) { alert(error.message); setLoading(false); return; }
 
       if (!migrationNeeded) {
@@ -329,7 +324,7 @@ export default function Inventory() {
         }
       }
     } else {
-      const { data: inserted, error } = await supabase.from('books').insert([bookPayload]).select();
+      const { data: inserted, error } = await localDb.from('books').insert([bookPayload]).select();
       if (error) { alert(error.message); setLoading(false); return; }
 
       if (!migrationNeeded && inserted && inserted[0]) {
@@ -394,7 +389,7 @@ export default function Inventory() {
   };
 
   const handleCopyStatusChange = async (copyId, bookId, newStatus) => {
-    const { error } = await supabaseAdmin
+    const { error } = await localDbAdmin
       .from('book_copies')
       .update({ status: newStatus })
       .eq('id', copyId);
@@ -405,7 +400,7 @@ export default function Inventory() {
       ? c.status === 'available'
       : newStatus === 'available'
     ).length;
-    await supabase.from('books').update({ quantity: available }).eq('id', bookId);
+    await localDb.from('books').update({ quantity: available }).eq('id', bookId);
     fetchCopiesForBook(bookId);
     fetchInventory();
   };
@@ -416,7 +411,7 @@ export default function Inventory() {
       return;
     }
 
-    const { data: allCopies, error } = await supabaseAdmin
+    const { data: allCopies, error } = await localDbAdmin
       .from('book_copies')
       .select('*, books(title, accession_num)')
       .order('accession_id', { ascending: true });
@@ -556,7 +551,7 @@ export default function Inventory() {
             <div>
               <p style={{ margin: 0, fontWeight: 'bold', color: '#92400e' }}>⚠️ One-time database setup required</p>
               <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#78350f' }}>
-                To enable per-copy barcode tracking, run the SQL below in your <strong>Supabase SQL Editor</strong> once.
+                To enable per-copy barcode tracking, run the SQL below in your <strong>phpMyAdmin SQL tab</strong> once.
               </p>
             </div>
             <button

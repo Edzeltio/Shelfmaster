@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import Toast from './Toast';
 
 const ACTIVE_STATUSES = ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out'];
@@ -27,7 +27,7 @@ export default function PendingRequests() {
   }
 
   async function fetchPendingRequests() {
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id,
@@ -50,7 +50,7 @@ export default function PendingRequests() {
   }
 
   async function fetchActiveLoans() {
-    let { data, error } = await supabaseAdmin
+    let { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id,
@@ -67,7 +67,7 @@ export default function PendingRequests() {
       .order('borrow_date', { ascending: true });
 
     if (error && (error.code === '42P01' || error.code === 'PGRST200' || error.message?.includes('book_copies'))) {
-      ({ data, error } = await supabaseAdmin
+      ({ data, error } = await localDbAdmin
         .from('transactions')
         .select(`
           id,
@@ -101,7 +101,7 @@ export default function PendingRequests() {
         ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await localDbAdmin
         .from('transactions')
         .update({
           status: cached,
@@ -125,7 +125,7 @@ export default function PendingRequests() {
       : null;
 
     for (const candidate of candidates) {
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await localDbAdmin
         .from('transactions')
         .update({
           status: candidate,
@@ -147,12 +147,12 @@ export default function PendingRequests() {
       }
     }
     throw new Error(
-      'Could not find an accepted status value. Please check your Supabase transactions table constraint.'
+      'Could not find an accepted status value. Please check your transactions table status constraint.'
     );
   };
 
   const assignAvailableCopy = async (bookId) => {
-    const { data: copy, error } = await supabaseAdmin
+    const { data: copy, error } = await localDbAdmin
       .from('book_copies')
       .select('id, accession_id, copy_number')
       .eq('book_id', bookId)
@@ -185,13 +185,13 @@ export default function PendingRequests() {
         const resolvedStatus = await resolveStatus(transactionId, true, isTeacher);
 
         if (copy) {
-          const { error: copyUpdateError } = await supabaseAdmin
+          const { error: copyUpdateError } = await localDbAdmin
             .from('book_copies')
             .update({ status: 'borrowed' })
             .eq('id', copy.id);
           if (copyUpdateError) throw copyUpdateError;
 
-          await supabaseAdmin
+          await localDbAdmin
             .from('transactions')
             .update({
               status: resolvedStatus,
@@ -206,7 +206,7 @@ export default function PendingRequests() {
             'success'
           );
         } else {
-          await supabaseAdmin
+          await localDbAdmin
             .from('transactions')
             .update({
               status: resolvedStatus,
@@ -221,7 +221,7 @@ export default function PendingRequests() {
           );
         }
 
-        const { error: stockError } = await supabaseAdmin
+        const { error: stockError } = await localDbAdmin
           .from('books')
           .update({ quantity: currentStock - 1 })
           .eq('id', bookId);

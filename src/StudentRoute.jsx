@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 /**
  * Wraps all student-only routes.
@@ -19,7 +19,7 @@ export default function StudentRoute({ children }) {
         navigate('/login', { replace: true });
         return;
       }
-      const { data } = await supabase
+      const { data } = await localDb
         .from('users')
         .select('role')
         .eq('auth_id', userId)
@@ -33,7 +33,7 @@ export default function StudentRoute({ children }) {
     }
 
     // Initial check on mount
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    localDb.auth.getUser().then(({ data: { user } }) => {
       checkRole(user?.id ?? null);
     });
 

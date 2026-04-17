@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StudentNavbar from './StudentNavbar';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 
 export default function StudentHome() {
   const navigate = useNavigate();
@@ -13,19 +13,19 @@ export default function StudentHome() {
 
   useEffect(() => {
     async function loadData() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await localDb.auth.getUser();
       if (!user) return;
 
       const [nameRes] = await Promise.all([
-        supabase.from('users').select('id, name').eq('auth_id', user.id).single(),
+        localDb.from('users').select('id, name').eq('auth_id', user.id).single(),
       ]);
       if (nameRes.data?.name) setUserName(nameRes.data.name);
       const usersId = nameRes.data?.id;
       if (!usersId) return;
 
       const [loansRes, pendingRes] = await Promise.all([
-        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'borrowed'),
-        supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'pending'),
+        localDb.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'borrowed'),
+        localDb.from('transactions').select('id', { count: 'exact', head: true }).eq('user_id', usersId).eq('status', 'pending'),
       ]);
 
       setStats({
@@ -40,14 +40,14 @@ export default function StudentHome() {
   async function fetchPopularBooks() {
     setPopularLoading(true);
     // Pull all borrow/return transactions and count per book_id
-    const { data: txns } = await supabaseAdmin
+    const { data: txns } = await localDbAdmin
       .from('transactions')
       .select('book_id')
       .in('status', ['borrowed', 'returned']);
 
     if (!txns || txns.length === 0) {
       // Fallback: show recently added books
-      const { data: recent } = await supabaseAdmin
+      const { data: recent } = await localDbAdmin
         .from('books')
         .select('id, title, authors, cover_image, quantity, category, subject_class')
         .neq('status', 'archived')
@@ -70,7 +70,7 @@ export default function StudentHome() {
       .slice(0, 8)
       .map(([id]) => id);
 
-    const { data: books } = await supabaseAdmin
+    const { data: books } = await localDbAdmin
       .from('books')
       .select('id, title, authors, cover_image, quantity, category, subject_class')
       .in('id', topIds)

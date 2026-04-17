@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -14,7 +14,7 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchSiteContent() {
-      const { data, error } = await supabase
+      const { data, error } = await localDb
         .from('site_content')
         .select('*')
         .limit(1)
@@ -28,7 +28,7 @@ export default function Home() {
 
   async function fetchBooks() {
     setBooksLoading(true);
-    const { data } = await supabaseAdmin
+    const { data } = await localDbAdmin
       .from('books')
       .select('id, title, authors, cover_image, quantity, category, subject_class')
       .neq('status', 'archived')

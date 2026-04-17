@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 export default function BorrowedBooks() {
   const [loans, setLoans] = useState([]);
@@ -10,11 +10,11 @@ export default function BorrowedBooks() {
   }, []);
 
   async function fetchLoans() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (!user) return;
 
     // Fetch transactions where the user hasn't returned the book yet
-    const { data, error } = await supabase
+    const { data, error } = await localDb
       .from('transactions')
       .select(`
         id,
@@ -37,14 +37,14 @@ export default function BorrowedBooks() {
 
   const handleReturn = async (loanId, bookId, currentAvailableStock) => {
     // 1. Update transaction to 'return'
-    const { error: transError } = await supabase
+    const { error: transError } = await localDb
       .from('transactions')
       .update({ transaction_type: 'return', return_date: new Date().toISOString() })
       .eq('id', loanId);
 
     if (!transError) {
       // 2. Put the book back into available stock
-      await supabase
+      await localDb
         .from('books')
         .update({ available_stock: currentAvailableStock + 1 })
         .eq('id', bookId);

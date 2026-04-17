@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 export default function BookCatalog() {
   const [books, setBooks] = useState([]);
@@ -10,7 +10,7 @@ export default function BookCatalog() {
   }, []);
 
   async function fetchBooks() {
-    const { data } = await supabase.from('books').select('*');
+    const { data } = await localDb.from('books').select('*');
     setBooks(data || []);
     setLoading(false);
   }
@@ -22,14 +22,14 @@ export default function BookCatalog() {
     }
 
     // 1. Get the current logged-in user
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (!user) {
       alert("Please login as a student first!");
       return;
     }
 
     // 2. Create the transaction record
-    const { error: transactionError } = await supabase
+    const { error: transactionError } = await localDb
       .from('transactions')
       .insert([
         { 
@@ -42,7 +42,7 @@ export default function BookCatalog() {
 
     // 3. Update the book stock
     if (!transactionError) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await localDb
         .from('books')
         .update({ available_stock: currentStock - 1 })
         .eq('id', bookId);

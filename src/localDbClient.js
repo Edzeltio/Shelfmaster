@@ -161,9 +161,7 @@ function readFileAsDataUrl(file) {
   });
 }
 
-export const supabaseConfigError = null;
-
-export const supabase = {
+export const localDb = {
   from(table) {
     return new QueryBuilder(table);
   },

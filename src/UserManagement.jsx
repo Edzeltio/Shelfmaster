@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDbAdmin } from './localDbAdmin';
 
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
@@ -16,7 +16,7 @@ export default function UserManagement() {
 
   async function fetchUsers() {
     setLoading(true);
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await localDbAdmin
       .from('users')
       .select('*, transactions (id, status)')
       .eq('role', 'student')
@@ -38,7 +38,7 @@ export default function UserManagement() {
     setLoansLoading(true);
     setUserLoans([]);
 
-    let { data, error } = await supabaseAdmin
+    let { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date,
@@ -50,7 +50,7 @@ export default function UserManagement() {
       .order('borrow_date', { ascending: false });
 
     if (error && (error.code === 'PGRST200' || (error.message || '').includes('book_copies') || (error.message || '').includes('schema cache'))) {
-      ({ data, error } = await supabaseAdmin
+      ({ data, error } = await localDbAdmin
         .from('transactions')
         .select('id, status, borrow_date, due_date, books (title, accession_num, authors)')
         .eq('user_id', user.id)

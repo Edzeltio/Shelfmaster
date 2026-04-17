@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 export default function LateReturns() {
   const [lateBooks, setLateBooks] = useState([]);
@@ -12,7 +12,7 @@ export default function LateReturns() {
   async function fetchLateBooks() {
     const now = new Date().toISOString();
 
-    const { data, error } = await supabase
+    const { data, error } = await localDb
       .from('transactions')
       .select(`
         id,

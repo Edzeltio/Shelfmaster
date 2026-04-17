@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import StudentNavbar from './StudentNavbar';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import Toast from './Toast';
 
 export default function StudentProfile() {
@@ -17,10 +17,10 @@ export default function StudentProfile() {
 
   async function fetchUserProfile() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data, error } = await supabase
+    const { data, error } = await localDb
       .from('users')
       .select('name, student_id, course_year, role, status')
       .eq('auth_id', user.id)
@@ -50,7 +50,7 @@ export default function StudentProfile() {
     e.preventDefault();
     setSaving(true);
     setSaveMsg('');
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (!user) { setSaving(false); return; }
 
     const cleanName = sanitizeText(form.name);
@@ -63,7 +63,7 @@ export default function StudentProfile() {
       return;
     }
 
-    const { data: saved, error } = await supabase
+    const { data: saved, error } = await localDb
       .from('users')
       .update({ name: cleanName, student_id: cleanStudentId, course_year: cleanCourseYear })
       .eq('auth_id', user.id)
@@ -74,11 +74,9 @@ export default function StudentProfile() {
       console.error('Profile update error:', error);
       setSaveMsg('Error: ' + error.message);
     } else if (!saved) {
-      // Update ran but returned nothing — likely blocked by a database permission policy
-      console.warn('Profile update: no rows returned. Check the UPDATE policy on the users table in Supabase.');
+      console.warn('Profile update: no rows returned. Check that the users table row exists.');
       setSaveMsg('⚠️ Save failed: the database did not accept the change. Ask your admin to enable UPDATE access on the users table.');
     } else {
-      // Confirmed: database returned the updated row
       setUserData(prev => ({ ...prev, name: cleanName, student_id: cleanStudentId, course_year: cleanCourseYear }));
       setSaveMsg('success');
       setTimeout(() => { setShowModal(false); setSaveMsg(''); }, 1000);

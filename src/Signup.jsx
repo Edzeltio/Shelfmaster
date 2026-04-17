@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import { useNavigate, Link } from 'react-router-dom';
 import myLogo from './assets/logo.png';
 
@@ -32,7 +32,7 @@ export default function Signup() {
     }
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const { data: authData, error: authError } = await localDb.auth.signUp({
         email: formData.email,
         password: formData.password,
       });
@@ -40,7 +40,7 @@ export default function Signup() {
       if (authError) throw authError;
 
       if (authData.user) {
-        const { error: profileError } = await supabase
+        const { error: profileError } = await localDb
           .from('users')
           .insert([{
             auth_id: authData.user.id,

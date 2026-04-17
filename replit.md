@@ -20,8 +20,8 @@ A web-based library management system (LMS) built with React + Vite, Express.js,
 - `src/` — All React source files (flat layout)
   - `main.jsx` — Entry point
   - `App.jsx` — Routing (public, `/student/*`, `/librarian/*`)
-  - `supabaseClient.js` — Compatibility client that keeps the old Supabase-style `.from()` and `.auth` API while calling Express/MySQL endpoints
-  - `supabaseAdmin.js` — Compatibility export that points to the Express/MySQL client
+  - `localDbClient.js` — Browser client for Express/MySQL `.from()` queries, auth, and uploads
+  - `localDbAdmin.js` — Shared local database client export used by librarian/admin screens
   - `BarcodeLabel.jsx` — Barcode label component + helpers (`generateBarcode`, `generateCopyAccessionId`)
   - `Inventory.jsx` — Physical book & eBook management with per-copy system; archive and eBook saves call server endpoints
   - `ProcessReturns.jsx` — Barcode scan to return a specific copy
@@ -71,7 +71,7 @@ The MySQL schema is created automatically by `server.js`. For manual setup, impo
 ## Replit Migration Notes
 
 - `.replit` runs `npm run dev` on port 5000; that script now starts `server.js`, which serves Vite in development and the built `dist` files in production.
-- The app no longer depends on Supabase secrets for local database features.
+- The app uses Express.js and XAMPP MySQL/MariaDB only for its database layer.
 - The archive action uses `/api/books/:id/archive` and eBook saves use `/api/ebooks`; the server verifies the requester is a librarian using JWT auth.
 - Inventory save payloads clean blank numeric fields before writing to MySQL to avoid numeric type errors.
 - File uploads are saved under `public/uploads/` and served from `/uploads/...`.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import StudentNavbar from './StudentNavbar';
 
 function isMigrationError(error) {
@@ -30,22 +30,22 @@ export default function StudentBooks() {
 
   async function fetchData() {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (!user) { setLoading(false); return; }
 
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await localDb
       .from('users').select('id').eq('auth_id', user.id).maybeSingle();
     if (userError) console.error('User lookup error:', userError);
     const userId = userData?.id;
     if (!userId) { setLoading(false); return; }
 
     let [loansRes, requestsRes] = await Promise.all([
-      supabase
+      localDb
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num), book_copies(accession_id, copy_number)')
         .eq('user_id', userId)
         .in('status', ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out']),
-      supabase
+      localDb
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
         .eq('user_id', userId)
@@ -53,7 +53,7 @@ export default function StudentBooks() {
     ]);
 
     if (loansRes.error && isMigrationError(loansRes.error)) {
-      loansRes = await supabase
+      loansRes = await localDb
         .from('transactions')
         .select('id, borrow_date, due_date, status, books(title, authors, accession_num)')
         .eq('user_id', userId)

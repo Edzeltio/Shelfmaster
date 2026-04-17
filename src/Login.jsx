@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import myLogo from './assets/logo.png';
 import Toast from './Toast';
 
@@ -18,7 +18,7 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    const { data: authData, error: authError } = await localDb.auth.signInWithPassword({ email, password });
 
     if (authError) {
       const msg = authError.message.includes('Invalid login credentials')
@@ -29,7 +29,7 @@ export default function Login() {
       return;
     }
 
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await localDb
       .from('users')
       .select('role')
       .eq('auth_id', authData.user.id)

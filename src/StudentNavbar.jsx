@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import myLogo from './assets/logo.png';
 
 export default function StudentNavbar() {
@@ -10,7 +10,7 @@ export default function StudentNavbar() {
   useEffect(() => {
     async function fetchUserName(userId) {
       if (!userId) { setUserName(''); return; }
-      const { data } = await supabase
+      const { data } = await localDb
         .from('users')
         .select('name')
         .eq('auth_id', userId)
@@ -19,10 +19,10 @@ export default function StudentNavbar() {
     }
 
     // Fetch on mount
-    supabase.auth.getUser().then(({ data: { user } }) => fetchUserName(user?.id));
+    localDb.auth.getUser().then(({ data: { user } }) => fetchUserName(user?.id));
 
     // Only clear the name if this tab signs out — ignore other tabs signing in
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = localDb.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') setUserName('');
     });
 
@@ -30,7 +30,7 @@ export default function StudentNavbar() {
   }, []);
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await localDb.auth.signOut();
     navigate('/login');
   };
 

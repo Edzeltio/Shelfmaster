@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import StudentNavbar from './StudentNavbar';
 import Toast from './Toast';
 
@@ -21,7 +21,7 @@ export default function StudentCatalog() {
 
   async function fetchBooks() {
     setLoading(true);
-    const { data, error } = await supabase.from('books').select('*').neq('status', 'archived');
+    const { data, error } = await localDb.from('books').select('*').neq('status', 'archived');
     if (!error) setBooks(data || []);
     setLoading(false);
   }
@@ -29,11 +29,11 @@ export default function StudentCatalog() {
   const handleAddToCart = async (book) => {
     setAddingId(book.id);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await localDb.auth.getUser();
       if (!user) { showToast('Please log in first.', 'warning'); return; }
 
       // transactions.user_id is a FK to users.id (not auth.users.id)
-      const { data: userData, error: userErr } = await supabase
+      const { data: userData, error: userErr } = await localDb
         .from('users')
         .select('id')
         .eq('auth_id', user.id)
@@ -44,7 +44,7 @@ export default function StudentCatalog() {
         return;
       }
 
-      const { data: existing } = await supabase
+      const { data: existing } = await localDb
         .from('transactions')
         .select('id, status')
         .eq('user_id', userData.id)
@@ -62,7 +62,7 @@ export default function StudentCatalog() {
         return;
       }
 
-      const { error } = await supabase.from('transactions').insert([{
+      const { error } = await localDb.from('transactions').insert([{
         user_id: userData.id,
         book_id: book.id,
         status: 'pending',

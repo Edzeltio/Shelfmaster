@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
@@ -15,13 +15,13 @@ export default function LibrarianDashboard() {
   useEffect(() => {
     fetchDashboardData();
 
-    const channel = supabase
+    const channel = localDb
       .channel('dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, fetchDashboardData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'books' }, fetchDashboardData)
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => localDb.removeChannel(channel);
   }, []);
 
   async function fetchDashboardData() {
@@ -34,10 +34,10 @@ export default function LibrarianDashboard() {
       { count: pending, error: pendingErr },
       { count: totalBorrowed, error: borrowedErr },
     ] = await Promise.all([
-      supabaseAdmin.from('books').select('*', { count: 'exact', head: true }),
-      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
-      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
-      supabaseAdmin.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),
+      localDbAdmin.from('books').select('*', { count: 'exact', head: true }),
+      localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
+      localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),
     ]);
 
     const anyError = booksErr || loansErr || pendingErr || borrowedErr;
@@ -55,7 +55,7 @@ export default function LibrarianDashboard() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const { data: transactions } = await supabaseAdmin
+    const { data: transactions } = await localDbAdmin
       .from('transactions')
       .select('borrow_date')
       .gte('borrow_date', sevenDaysAgo.toISOString());
@@ -74,7 +74,7 @@ export default function LibrarianDashboard() {
 
     setChartData(Object.keys(dateMap).map(key => ({ date: key, loans: dateMap[key] })));
 
-    const { data: topData } = await supabaseAdmin
+    const { data: topData } = await localDbAdmin
       .from('transactions')
       .select('book_id, books(title, authors)')
       .limit(20);

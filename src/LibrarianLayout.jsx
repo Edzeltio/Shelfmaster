@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 
 export default function LibrarianLayout() {
   const navigate = useNavigate();
@@ -13,10 +13,10 @@ export default function LibrarianLayout() {
   // Guard: verify session and librarian role before rendering
   useEffect(() => {
     async function verifyLibrarian() {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await localDb.auth.getUser();
       if (!user) { navigate('/login', { replace: true }); return; }
 
-      const { data } = await supabase
+      const { data } = await localDb
         .from('users')
         .select('role')
         .eq('auth_id', user.id)
@@ -44,7 +44,7 @@ export default function LibrarianLayout() {
   useEffect(() => {
     fetchPendingCount();
 
-    const channel = supabase
+    const channel = localDb
       .channel('pending-requests-badge')
       .on(
         'postgres_changes',
@@ -53,11 +53,11 @@ export default function LibrarianLayout() {
       )
       .subscribe();
 
-    return () => supabase.removeChannel(channel);
+    return () => localDb.removeChannel(channel);
   }, []);
 
   async function fetchPendingCount() {
-    const { count, error } = await supabase
+    const { count, error } = await localDb
       .from('transactions')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'pending');
@@ -86,7 +86,7 @@ export default function LibrarianLayout() {
   }
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
+    await localDb.auth.signOut();
     navigate('/login');
   };
 

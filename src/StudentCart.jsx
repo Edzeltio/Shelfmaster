@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
+import { localDb } from './localDbClient';
 import StudentNavbar from './StudentNavbar';
 
 export default function StudentCart() {
@@ -10,9 +10,9 @@ export default function StudentCart() {
   }, []);
 
   async function fetchPendingRequests() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user } } = await localDb.auth.getUser();
     if (user) {
-      const { data } = await supabase
+      const { data } = await localDb
         .from('transactions')
         .select('id, created_at, status, books(title, authors)')
         .eq('user_id', user.id)

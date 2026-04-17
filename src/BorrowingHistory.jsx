@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from './supabaseClient';
-import { supabaseAdmin } from './supabaseAdmin';
+import { localDb } from './localDbClient';
+import { localDbAdmin } from './localDbAdmin';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Toast from './Toast';
@@ -37,7 +37,7 @@ export default function BorrowingHistory() {
 
   async function fetchRecentGlobalHistory() {
     setLoading(true);
-    let { data, error } = await supabaseAdmin
+    let { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
@@ -49,7 +49,7 @@ export default function BorrowingHistory() {
       .limit(50);
 
     if (error && isMigrationError(error)) {
-      ({ data, error } = await supabaseAdmin
+      ({ data, error } = await localDbAdmin
         .from('transactions')
         .select('id, status, borrow_date, due_date, return_date, users (name, student_id), books (title, accession_num)')
         .order('created_at', { ascending: false })
@@ -69,7 +69,7 @@ export default function BorrowingHistory() {
   }, [searchQuery]);
 
   async function searchStudents() {
-    const { data } = await supabase
+    const { data } = await localDb
       .from('users')
       .select('id, name, student_id, course_year')
       .ilike('name', `%${searchQuery}%`)
@@ -84,7 +84,7 @@ export default function BorrowingHistory() {
     setSearchQuery('');
     setStudents([]);
 
-    let { data, error } = await supabaseAdmin
+    let { data, error } = await localDbAdmin
       .from('transactions')
       .select(`
         id, status, borrow_date, due_date, return_date,
@@ -95,7 +95,7 @@ export default function BorrowingHistory() {
       .order('created_at', { ascending: false });
 
     if (error && isMigrationError(error)) {
-      ({ data, error } = await supabaseAdmin
+      ({ data, error } = await localDbAdmin
         .from('transactions')
         .select('id, status, borrow_date, due_date, return_date, books (title, accession_num)')
         .eq('user_id', student.id)

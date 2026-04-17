@@ -26,6 +26,23 @@ ALTER TABLE book_copies ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow all for book_copies" ON book_copies
   FOR ALL USING (true) WITH CHECK (true);`;
 
+const nullableNumberFields = ['pages', 'cost_price', 'quantity'];
+
+function cleanBookPayload(payload) {
+  return Object.fromEntries(
+    Object.entries(payload).map(([key, value]) => {
+      if (nullableNumberFields.includes(key)) {
+        if (value === '' || value === null || value === undefined) {
+          return [key, null];
+        }
+        const numberValue = Number(value);
+        return [key, Number.isFinite(numberValue) ? numberValue : null];
+      }
+      return [key, typeof value === 'string' ? value.trim() : value];
+    })
+  );
+}
+
 export default function Inventory() {
   const [activeTab, setActiveTab] = useState('books');
   const [books, setBooks] = useState([]);
@@ -235,6 +252,34 @@ export default function Inventory() {
     }
   };
 
+  async function getSessionToken() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    return sessionData?.session?.access_token;
+  }
+
+  async function requestJson(url, options = {}) {
+    const token = await getSessionToken();
+    if (!token) {
+      throw new Error('Please sign in again.');
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Request failed.');
+    }
+
+    return result;
+  }
+
   const handleSaveBook = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -258,9 +303,9 @@ export default function Inventory() {
     }
 
     const { cover_image: _ignored, ...formWithoutCover } = formData;
-    const bookPayload = coverColAvailable
+    const bookPayload = cleanBookPayload(coverColAvailable
       ? { ...formWithoutCover, cover_image: coverUrl }
-      : formWithoutCover;
+      : formWithoutCover);
 
     if (isEditing) {
       const { error } = await supabase.from('books').update(bookPayload).eq('id', currentBookId);
@@ -326,37 +371,26 @@ export default function Inventory() {
     e.preventDefault();
     setLoading(true);
 
-    if (editingEbook) {
-      const { error } = await supabase
-        .from('books')
-        .update({ title: ebookForm.title, source: ebookForm.url })
-        .eq('id', editingEbook.id);
-      if (error) alert('Failed to update eBook: ' + error.message);
-    } else {
-      const { data: last } = await supabase
-        .from('books')
-        .select('accession_num')
-        .order('accession_num', { ascending: false })
-        .limit(1);
-      const lastNum = last && last[0] ? parseInt(last[0].accession_num) : 0;
-      const nextAcc = (lastNum + 1).toString().padStart(5, '0');
+    try {
+      if (editingEbook) {
+        await requestJson(`/api/ebooks/${editingEbook.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(ebookForm),
+        });
+      } else {
+        await requestJson('/api/ebooks', {
+          method: 'POST',
+          body: JSON.stringify(ebookForm),
+        });
+      }
 
-      const { error } = await supabase.from('books').insert([{
-        accession_num: nextAcc,
-        title: ebookForm.title,
-        authors: 'eBook',
-        quantity: 1,
-        book_type: 'eBook',
-        source: ebookForm.url,
-        date_acquired: new Date().toISOString().split('T')[0],
-        status: 'active',
-      }]);
-      if (error) alert('Failed to save eBook: ' + error.message);
+      setShowEbookModal(false);
+      fetchInventory();
+    } catch (error) {
+      alert('Failed to save eBook: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-
-    setShowEbookModal(false);
-    fetchInventory();
-    setLoading(false);
   };
 
   const handleCopyStatusChange = async (copyId, bookId, newStatus) => {

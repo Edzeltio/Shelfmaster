@@ -32,7 +32,7 @@ async function requireLibrarian(req, res) {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
 
   if (!token) {
-    res.status(401).json({ error: 'Please sign in again before archiving books.' });
+    res.status(401).json({ error: 'Please sign in again before making this change.' });
     return null;
   }
 
@@ -76,6 +76,83 @@ app.post('/api/books/:id/archive', async (req, res) => {
     .from('books')
     .update({ status: 'archived' })
     .eq('id', id);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ ok: true });
+});
+
+app.post('/api/ebooks', async (req, res) => {
+  const admin = await requireLibrarian(req, res);
+  if (!admin) return;
+
+  const title = String(req.body?.title || '').trim();
+  const source = String(req.body?.url || '').trim();
+
+  if (!title || !source) {
+    res.status(400).json({ error: 'Please enter both an eBook title and URL.' });
+    return;
+  }
+
+  const { data: last, error: lastError } = await admin
+    .from('books')
+    .select('accession_num')
+    .order('accession_num', { ascending: false })
+    .limit(1);
+
+  if (lastError) {
+    res.status(500).json({ error: lastError.message });
+    return;
+  }
+
+  const numericAccessions = (last || [])
+    .map(book => Number.parseInt(book.accession_num, 10))
+    .filter(Number.isFinite);
+  const nextAcc = ((numericAccessions[0] || 0) + 1).toString().padStart(5, '0');
+
+  const { data, error } = await admin
+    .from('books')
+    .insert([{
+      accession_num: nextAcc,
+      title,
+      authors: 'eBook',
+      quantity: 1,
+      book_type: 'eBook',
+      source,
+      date_acquired: new Date().toISOString().split('T')[0],
+      status: 'active',
+    }])
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ ok: true, ebook: data });
+});
+
+app.patch('/api/ebooks/:id', async (req, res) => {
+  const admin = await requireLibrarian(req, res);
+  if (!admin) return;
+
+  const title = String(req.body?.title || '').trim();
+  const source = String(req.body?.url || '').trim();
+
+  if (!title || !source) {
+    res.status(400).json({ error: 'Please enter both an eBook title and URL.' });
+    return;
+  }
+
+  const { error } = await admin
+    .from('books')
+    .update({ title, source })
+    .eq('id', req.params.id)
+    .eq('book_type', 'eBook');
 
   if (error) {
     res.status(500).json({ error: error.message });

@@ -21,7 +21,7 @@ A web-based library management system (LMS) built with React + Vite and Supabase
   - `supabaseClient.js` — Supabase anon client with graceful missing-secret handling
   - `supabaseAdmin.js` — Compatibility export that reuses the safe browser Supabase client; service-role keys are not exposed in Vite
   - `BarcodeLabel.jsx` — Barcode label component + helpers (`generateBarcode`, `generateCopyAccessionId`)
-  - `Inventory.jsx` — Physical book & eBook management with per-copy system; archive calls server endpoint
+  - `Inventory.jsx` — Physical book & eBook management with per-copy system; archive and eBook saves call server endpoints
   - `ProcessReturns.jsx` — Barcode scan to return a specific copy
   - `PendingRequests.jsx` — Approve/decline borrow requests, assigns specific copies
   - `BorrowingHistory.jsx` — Full transaction log with copy accession IDs
@@ -86,7 +86,8 @@ CREATE POLICY "Allow all for book_copies" ON book_copies
 
 - `.replit` runs `npm run dev` on port 5000; that script now starts `server.js`, which serves Vite in development and the built `dist` files in production.
 - Missing Supabase client secrets no longer crash the app at startup; actions that require Supabase return an explicit configuration error until the secrets are added.
-- The archive action uses `/api/books/:id/archive` so Row Level Security is bypassed only on the server after verifying the requester is a librarian.
+- The archive action uses `/api/books/:id/archive` and eBook saves use `/api/ebooks` so Row Level Security is bypassed only on the server after verifying the requester is a librarian.
+- Inventory save payloads clean blank numeric fields before writing to Supabase to avoid numeric type errors.
 
 ## Development
 

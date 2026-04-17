@@ -96,7 +96,28 @@ export default function PendingRequests() {
   const resolveStatus = async (transactionId, isApprove, isTeacher) => {
     const storageKey = isApprove ? 'sm_approve_status' : 'sm_decline_status';
     const cached = localStorage.getItem(storageKey);
-    if (cached) return cached;
+    if (cached) {
+      const dueDate = isApprove && !isTeacher
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+      const { data, error } = await supabaseAdmin
+        .from('transactions')
+        .update({
+          status: cached,
+          borrow_date: isApprove ? new Date().toISOString() : null,
+          due_date: isApprove ? dueDate : null,
+        })
+        .eq('id', transactionId)
+        .select();
+
+      if (!error && data && data.length > 0) {
+        return cached;
+      }
+
+      localStorage.removeItem(storageKey);
+      if (error && error.code !== '23514') throw error;
+    }
 
     const candidates = isApprove ? APPROVE_CANDIDATES : DECLINE_CANDIDATES;
     const dueDate = isApprove && !isTeacher

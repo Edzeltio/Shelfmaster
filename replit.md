@@ -1,12 +1,13 @@
 # ShelfMaster
 
-A web-based library management system (LMS) built with React + Vite and Supabase.
+A web-based library management system (LMS) built with React + Vite, Express.js, and MySQL/MariaDB for local XAMPP/phpMyAdmin usage.
 
 ## Tech Stack
 
 - **Frontend:** React 19, React Router DOM v7
-- **Build Tool:** Vite 8 served through a small Express wrapper on port 5000
-- **Backend/Database:** Supabase (PostgreSQL + Auth)
+- **Build Tool:** Vite 8 served through an Express server on port 5000
+- **Backend/Database:** Express.js API with MySQL/MariaDB via `mysql2`
+- **Local Database Target:** XAMPP MySQL/MariaDB, default database `shelfmaster`
 - **Charts:** Recharts
 - **Barcodes:** react-barcode, jsbarcode
 - **PDF:** jsPDF + jspdf-autotable
@@ -14,12 +15,13 @@ A web-based library management system (LMS) built with React + Vite and Supabase
 
 ## Project Structure
 
-- `server.js` — Express server that hosts the Vite app and provides server-only privileged archive endpoint
+- `server.js` — Express server that hosts the Vite app, creates MySQL tables, handles auth, uploads, and database API calls
+- `xampp_schema.sql` — Optional phpMyAdmin import file for manually creating the local MySQL schema
 - `src/` — All React source files (flat layout)
   - `main.jsx` — Entry point
   - `App.jsx` — Routing (public, `/student/*`, `/librarian/*`)
-  - `supabaseClient.js` — Supabase anon client with graceful missing-secret handling
-  - `supabaseAdmin.js` — Compatibility export that reuses the safe browser Supabase client; service-role keys are not exposed in Vite
+  - `supabaseClient.js` — Compatibility client that keeps the old Supabase-style `.from()` and `.auth` API while calling Express/MySQL endpoints
+  - `supabaseAdmin.js` — Compatibility export that points to the Express/MySQL client
   - `BarcodeLabel.jsx` — Barcode label component + helpers (`generateBarcode`, `generateCopyAccessionId`)
   - `Inventory.jsx` — Physical book & eBook management with per-copy system; archive and eBook saves call server endpoints
   - `ProcessReturns.jsx` — Barcode scan to return a specific copy
@@ -29,16 +31,19 @@ A web-based library management system (LMS) built with React + Vite and Supabase
   - `StudentCatalog.jsx` — Public book catalog with borrow request
 - `public/` — Static assets
 
-## Environment Variables (stored in Replit Secrets)
+## Local XAMPP Database Configuration
 
-Client-side Supabase access:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+Default local MySQL settings match a standard XAMPP install:
+- `DB_HOST=127.0.0.1`
+- `DB_PORT=3306`
+- `DB_USER=root`
+- `DB_PASSWORD=`
+- `DB_NAME=shelfmaster`
+- `JWT_SECRET=shelfmaster-local-dev-secret`
 
-Server-only privileged actions:
-- `SUPABASE_SERVICE_ROLE_KEY`
+`server.js` loads `.env` automatically if present. If no `.env` is provided, it uses the XAMPP defaults above. The server creates the `shelfmaster` database and tables automatically when XAMPP MySQL is running.
 
-For backward compatibility during import, `server.js` can also read `VITE_SUPABASE_SERVICE_ROLE_KEY` on the server, but service-role keys should be moved to `SUPABASE_SERVICE_ROLE_KEY` and never exposed to browser code.
+The optional `xampp_schema.sql` file can also be imported through phpMyAdmin. The first account registered through the app is automatically made a librarian so a new local database can be administered immediately.
 
 ## Database Schema
 
@@ -52,26 +57,7 @@ One row per physical copy. This is what gets scanned.
 ### transactions
 - `id`, `user_id` (FK→users), `book_id` (FK→books), `copy_id` (FK→book_copies, nullable), `status`, `borrow_date`, `due_date`, `return_date`
 
-### Migration SQL (run once in Supabase SQL Editor)
-```sql
-CREATE TABLE IF NOT EXISTS book_copies (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  book_id UUID NOT NULL REFERENCES books(id) ON DELETE CASCADE,
-  copy_number INTEGER NOT NULL DEFAULT 1,
-  accession_id TEXT UNIQUE NOT NULL,
-  status TEXT NOT NULL DEFAULT 'available'
-    CHECK (status IN ('available', 'borrowed', 'damaged', 'lost')),
-  date_acquired DATE,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
-ALTER TABLE transactions
-  ADD COLUMN IF NOT EXISTS copy_id UUID REFERENCES book_copies(id);
-
-ALTER TABLE book_copies ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow all for book_copies" ON book_copies
-  FOR ALL USING (true) WITH CHECK (true);
-```
+The MySQL schema is created automatically by `server.js`. For manual setup, import `xampp_schema.sql` in phpMyAdmin.
 
 ## Per-Copy Barcode System
 
@@ -85,13 +71,14 @@ CREATE POLICY "Allow all for book_copies" ON book_copies
 ## Replit Migration Notes
 
 - `.replit` runs `npm run dev` on port 5000; that script now starts `server.js`, which serves Vite in development and the built `dist` files in production.
-- Missing Supabase client secrets no longer crash the app at startup; actions that require Supabase return an explicit configuration error until the secrets are added.
-- The archive action uses `/api/books/:id/archive` and eBook saves use `/api/ebooks` so Row Level Security is bypassed only on the server after verifying the requester is a librarian.
-- Inventory save payloads clean blank numeric fields before writing to Supabase to avoid numeric type errors.
+- The app no longer depends on Supabase secrets for local database features.
+- The archive action uses `/api/books/:id/archive` and eBook saves use `/api/ebooks`; the server verifies the requester is a librarian using JWT auth.
+- Inventory save payloads clean blank numeric fields before writing to MySQL to avoid numeric type errors.
+- File uploads are saved under `public/uploads/` and served from `/uploads/...`.
 
 ## Development
 
 ```bash
 npm install
-npm run dev   # starts on port 5000
+npm run dev   # with XAMPP MySQL running, starts on port 5000
 ```

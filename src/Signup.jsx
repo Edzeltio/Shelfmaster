@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { localDb } from './localDbClient';
 import { useNavigate, Link } from 'react-router-dom';
 import myLogo from './assets/logo.png';
+import Toast from './Toast';
 
 export default function Signup() {
   const [formData, setFormData] = useState({
@@ -13,7 +14,9 @@ export default function Signup() {
     role: 'student'
   });
   const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
   const navigate = useNavigate();
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   const sanitizeText = (str) => str.replace(/<[^>]*>/g, '').trim();
 
@@ -26,7 +29,7 @@ export default function Signup() {
     const cleanCourseYear = sanitizeText(formData.course_year);
 
     if (!cleanName || !cleanStudentId || !cleanCourseYear) {
-      alert('Please enter valid text without HTML tags.');
+      showToast('Please enter valid text without HTML tags.', 'warning');
       setLoading(false);
       return;
     }
@@ -53,11 +56,11 @@ export default function Signup() {
 
         if (profileError) throw profileError;
 
-        alert("Registration successful! You can now log in.");
-        navigate('/login');
+        showToast('Registration successful! You can now log in.', 'success');
+        setTimeout(() => navigate('/login'), 1200);
       }
     } catch (err) {
-      alert("Error: " + err.message);
+      showToast('Error: ' + err.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,7 @@ export default function Signup() {
 
   return (
     <div style={wrapperStyle}>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
       {/* LEFT PANEL */}
       <div style={leftPanelStyle}>
         <div style={overlayStyle}></div>

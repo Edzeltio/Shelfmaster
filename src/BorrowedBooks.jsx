@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { localDb } from './localDbClient';
+import Toast from './Toast';
 
 export default function BorrowedBooks() {
   const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     fetchLoans();
@@ -30,7 +33,10 @@ export default function BorrowedBooks() {
       .eq('user_id', user.id)
       .eq('transaction_type', 'borrow'); // Only show current borrows
 
-    if (error) console.error(error);
+    if (error) {
+      console.error(error);
+      showToast('Failed to load borrowed books.', 'error');
+    }
     else setLoans(data || []);
     setLoading(false);
   }
@@ -49,8 +55,10 @@ export default function BorrowedBooks() {
         .update({ available_stock: currentAvailableStock + 1 })
         .eq('id', bookId);
 
-      alert("Book returned successfully!");
+      showToast('Book returned successfully!', 'success');
       fetchLoans(); // Refresh the list
+    } else {
+      showToast('Failed to return book: ' + transError.message, 'error');
     }
   };
 
@@ -58,6 +66,7 @@ export default function BorrowedBooks() {
 
   return (
     <div style={{ padding: '2rem' }}>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
       <h2>My Borrowed Books</h2>
       {loans.length === 0 ? (
         <p>You have no active borrows.</p>

@@ -4,6 +4,7 @@ import { localDbAdmin } from './localDbAdmin';
 import BarcodeLabel, { generateBarcode, generateCopyAccessionId } from './BarcodeLabel';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
+import Toast from './Toast';
 
 const MIGRATION_SQL =
 `-- The Express server creates this table automatically when XAMPP MySQL is running.
@@ -56,6 +57,8 @@ export default function Inventory() {
   const [migrationNeeded, setMigrationNeeded] = useState(false);
   const [migrationChecked, setMigrationChecked] = useState(false);
   const [showMigration, setShowMigration] = useState(false);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   const initialFormState = {
     accession_num: '',
@@ -205,11 +208,11 @@ export default function Inventory() {
   const handleCoverChange = (file) => {
     if (!file) return;
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file (JPG, PNG, WEBP, etc.).');
+      showToast('Please select an image file (JPG, PNG, WEBP, etc.).', 'warning');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be 5 MB or less.');
+      showToast('Image must be 5 MB or less.', 'warning');
       return;
     }
     setCoverFile(file);
@@ -223,7 +226,7 @@ export default function Inventory() {
       const token = sessionData?.session?.access_token;
 
       if (!token) {
-        alert('Archive failed: please sign in again.');
+        showToast('Archive failed: please sign in again.', 'error');
         return;
       }
 
@@ -241,8 +244,9 @@ export default function Inventory() {
         }
 
         fetchInventory();
+        showToast(`"${book.title}" archived successfully.`, 'success');
       } catch (error) {
-        alert('Archive failed: ' + error.message);
+        showToast('Archive failed: ' + error.message, 'error');
       }
     }
   };
@@ -289,7 +293,7 @@ export default function Inventory() {
         .from('book-covers')
         .upload(filename, coverFile, { upsert: true, contentType: coverFile.type });
       if (upErr) {
-        alert('Image upload failed: ' + upErr.message);
+        showToast('Image upload failed: ' + upErr.message, 'error');
         setLoading(false);
         return;
       }
@@ -304,7 +308,7 @@ export default function Inventory() {
 
     if (isEditing) {
       const { error } = await localDb.from('books').update(bookPayload).eq('id', currentBookId);
-      if (error) { alert(error.message); setLoading(false); return; }
+      if (error) { showToast(error.message, 'error'); setLoading(false); return; }
 
       if (!migrationNeeded) {
         const existing = copiesMap[currentBookId] || [];
@@ -325,7 +329,7 @@ export default function Inventory() {
       }
     } else {
       const { data: inserted, error } = await localDb.from('books').insert([bookPayload]).select();
-      if (error) { alert(error.message); setLoading(false); return; }
+      if (error) { showToast(error.message, 'error'); setLoading(false); return; }
 
       if (!migrationNeeded && inserted && inserted[0]) {
         const bookId = inserted[0].id;
@@ -336,7 +340,7 @@ export default function Inventory() {
           const msg = err.message || '';
           const isMigErr = msg.includes('book_copies') || msg.includes('schema cache') || msg.includes('PGRST200');
           if (!isMigErr) {
-            alert('Book saved but copy generation failed: ' + err.message);
+            showToast('Book saved but copy generation failed: ' + err.message, 'warning');
           }
           // If migration not done yet, silently skip — the banner will guide the user
         }
@@ -346,6 +350,7 @@ export default function Inventory() {
     setShowModal(false);
     fetchInventory();
     if (expandedBookId) fetchCopiesForBook(expandedBookId);
+    showToast(isEditing ? 'Book updated successfully.' : 'Book saved successfully.', 'success');
     setLoading(false);
   };
 
@@ -381,8 +386,9 @@ export default function Inventory() {
 
       setShowEbookModal(false);
       fetchInventory();
+      showToast(editingEbook ? 'eBook updated successfully.' : 'eBook saved successfully.', 'success');
     } catch (error) {
-      alert('Failed to save eBook: ' + error.message);
+      showToast('Failed to save eBook: ' + error.message, 'error');
     } finally {
       setLoading(false);
     }
@@ -393,7 +399,7 @@ export default function Inventory() {
       .from('book_copies')
       .update({ status: newStatus })
       .eq('id', copyId);
-    if (error) { alert('Failed to update copy status: ' + error.message); return; }
+    if (error) { showToast('Failed to update copy status: ' + error.message, 'error'); return; }
 
     const copies = copiesMap[bookId] || [];
     const available = copies.filter(c => c.id !== copyId
@@ -403,11 +409,12 @@ export default function Inventory() {
     await localDb.from('books').update({ quantity: available }).eq('id', bookId);
     fetchCopiesForBook(bookId);
     fetchInventory();
+    showToast('Copy status updated successfully.', 'success');
   };
 
   const exportAllCopiesPDF = async () => {
     if (migrationNeeded) {
-      alert('Please run the database migration first. Click "Database Setup" to view the SQL.');
+      showToast('Please run the database setup first. Click "Database Setup" to view the SQL.', 'warning');
       return;
     }
 
@@ -417,7 +424,7 @@ export default function Inventory() {
       .order('accession_id', { ascending: true });
 
     if (error || !allCopies || allCopies.length === 0) {
-      alert('No copies found. Add books first to generate copies.');
+      showToast('No copies found. Add books first to generate copies.', 'warning');
       return;
     }
 
@@ -491,7 +498,7 @@ export default function Inventory() {
   const exportCopiesForBook = async (book) => {
     if (migrationNeeded) return;
     const copies = copiesMap[book.id] || [];
-    if (copies.length === 0) { alert('No copies found for this book.'); return; }
+    if (copies.length === 0) { showToast('No copies found for this book.', 'warning'); return; }
 
     const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageW = 210;
@@ -543,6 +550,7 @@ export default function Inventory() {
 
   return (
     <div style={{ padding: '30px', background: 'var(--cream)', minHeight: '100vh' }}>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
 
       {/* MIGRATION BANNER */}
       {migrationChecked && migrationNeeded && (
@@ -567,7 +575,7 @@ export default function Inventory() {
                 {MIGRATION_SQL}
               </pre>
               <button
-                onClick={() => { navigator.clipboard.writeText(MIGRATION_SQL); alert('SQL copied to clipboard!'); }}
+                onClick={() => { navigator.clipboard.writeText(MIGRATION_SQL); showToast('SQL copied to clipboard!', 'success'); }}
                 style={{ position: 'absolute', top: '8px', right: '8px', background: '#334155', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 10px', fontSize: '0.72rem', cursor: 'pointer' }}
               >
                 Copy
@@ -717,8 +725,9 @@ export default function Inventory() {
                                     try {
                                       await generateCopiesForBook(book.id, book.quantity || 1, book.date_acquired, 1);
                                       await fetchCopiesForBook(book.id);
+                                      showToast('Copies generated successfully.', 'success');
                                     } catch (err) {
-                                      alert('Failed: ' + err.message);
+                                      showToast('Failed: ' + err.message, 'error');
                                     }
                                   }}
                                   style={{ background: 'var(--green)', color: 'white', border: 'none', padding: '6px 14px', borderRadius: '6px', fontSize: '0.82rem', fontWeight: 'bold', cursor: 'pointer' }}

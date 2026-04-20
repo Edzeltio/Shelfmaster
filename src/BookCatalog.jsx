@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { localDb } from './localDbClient';
+import Toast from './Toast';
 
 export default function BookCatalog() {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   useEffect(() => {
     fetchBooks();
@@ -17,14 +20,14 @@ export default function BookCatalog() {
 
   const handleBorrow = async (bookId, currentStock) => {
     if (currentStock <= 0) {
-      alert("Out of stock!");
+      showToast('Out of stock!', 'warning');
       return;
     }
 
     // 1. Get the current logged-in user
     const { data: { user } } = await localDb.auth.getUser();
     if (!user) {
-      alert("Please login as a student first!");
+      showToast('Please login as a student first!', 'warning');
       return;
     }
 
@@ -47,13 +50,13 @@ export default function BookCatalog() {
         .update({ available_stock: currentStock - 1 })
         .eq('id', bookId);
 
-      if (updateError) alert("Error updating stock");
+      if (updateError) showToast('Error updating stock.', 'error');
       else {
-        alert("Book borrowed successfully!");
+        showToast('Book borrowed successfully!', 'success');
         fetchBooks(); // Refresh the list
       }
     } else {
-      alert(transactionError.message);
+      showToast(transactionError.message, 'error');
     }
   };
 
@@ -61,6 +64,7 @@ export default function BookCatalog() {
 
   return (
     <div style={{ padding: '2rem' }}>
+      <Toast {...toast} onClose={() => setToast({ message: '' })} />
       <h2>Available Books</h2>
       <div style={{ display: 'grid', gap: '20px', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
         {books.map((book) => (

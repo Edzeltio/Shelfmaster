@@ -527,6 +527,18 @@ app.post('/api/books/:id/unarchive', async (req, res) => {
   }
 });
 
+app.delete('/api/books/:id', async (req, res) => {
+  const db = await requireLibrarian(req, res);
+  if (!db) return;
+
+  try {
+    await db.query('DELETE FROM books WHERE id = ?', [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/ebooks', async (req, res) => {
   const db = await requireLibrarian(req, res);
   if (!db) return;

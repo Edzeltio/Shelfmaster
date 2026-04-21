@@ -141,6 +141,33 @@ export default function Inventory() {
     if (!archErr) setArchivedBooks(archived || []);
   }
 
+  const handleDeleteForever = async (book) => {
+    const confirmed = window.confirm(`Permanently delete "${book.title}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    const { data: sessionData } = await localDb.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    if (!token) {
+      showToast('Delete failed: please sign in again.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/books/${book.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Delete failed.');
+
+      fetchInventory();
+      showToast(`"${book.title}" permanently deleted.`, 'success');
+    } catch (error) {
+      showToast('Delete failed: ' + error.message, 'error');
+    }
+  };
+
   const handleUnarchive = async (book) => {
     const confirmed = window.confirm(`Restore "${book.title}" to the active catalog?`);
     if (!confirmed) return;
@@ -934,12 +961,20 @@ export default function Inventory() {
                       </span>
                     </td>
                     <td style={tdStyle}>
-                      <button
-                        onClick={() => handleUnarchive(book)}
-                        style={{ background: '#dcfce7', color: '#059669', border: '1px solid #bbf7d0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}
-                      >
-                        ♻️ Restore
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleUnarchive(book)}
+                          style={{ background: '#dcfce7', color: '#059669', border: '1px solid #bbf7d0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}
+                        >
+                          ♻️ Restore
+                        </button>
+                        <button
+                          onClick={() => handleDeleteForever(book)}
+                          style={{ background: '#fee2e2', color: '#b91c1c', border: '1px solid #fecaca', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

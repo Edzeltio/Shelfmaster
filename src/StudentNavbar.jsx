@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { localDb } from './localDbClient';
 import myLogo from './assets/logo.png';
+import ServerBadge from './ServerBadge';
 
 export default function StudentNavbar() {
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function StudentNavbar() {
         <Link to="/student/profile" style={linkStyle}>Profile</Link>
         
         <div style={userSectionStyle}>
+          <ServerBadge />
           {userName && <span style={userNameStyle}>{userName}</span>}
           <button onClick={handleLogout} style={logoutButtonStyle}>Logout</button>
         </div>

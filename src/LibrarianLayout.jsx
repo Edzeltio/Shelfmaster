@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { localDb } from './localDbClient';
+import ServerBadge from './ServerBadge';
 
 export default function LibrarianLayout() {
   const navigate = useNavigate();
@@ -151,6 +152,9 @@ export default function LibrarianLayout() {
         </nav>
 
         <div className="sidebar-footer">
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+            <ServerBadge />
+          </div>
           <button onClick={handleLogout} className="btn-logout">Logout</button>
         </div>
       </aside>

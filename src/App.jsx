@@ -25,6 +25,7 @@ import ProcessReturns from './ProcessReturns';
 import Settings from './Settings';
 import BorrowingHistory from './BorrowingHistory';
 import NetworkSettings from './NetworkSettings';
+import WalkIn from './WalkIn';
 
 export default function App() {
   return (
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="inventory" element={<Inventory />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="requests" element={<PendingRequests />} />
+          <Route path="walkin" element={<WalkIn />} />
           <Route path="returns" element={<ProcessReturns />} />
           <Route path="settings" element={<Settings />} />
           <Route path="history" element={<BorrowingHistory />} />

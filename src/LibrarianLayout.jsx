@@ -146,6 +146,7 @@ export default function LibrarianLayout() {
             )}
           </Link>
 
+          <Link to="/librarian/walkin" className="sidebar-link">Walk-in Borrowing</Link>
           <Link to="/librarian/returns" className="sidebar-link">Process Returns</Link>
           <Link to="/librarian/history" className="sidebar-link">Borrowing History</Link>
           <Link to="/librarian/settings" className="sidebar-link">Settings</Link>

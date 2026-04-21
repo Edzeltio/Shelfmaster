@@ -34,7 +34,7 @@ export default function LibrarianDashboard() {
       { count: pending, error: pendingErr },
       { count: totalBorrowed, error: borrowedErr },
     ] = await Promise.all([
-      localDbAdmin.from('books').select('*', { count: 'exact', head: true }),
+      localDbAdmin.from('books').select('*', { count: 'exact', head: true }).neq('status', 'archived'),
       localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'borrowed'),
       localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       localDbAdmin.from('transactions').select('*', { count: 'exact', head: true }).in('status', ['borrowed', 'returned']),

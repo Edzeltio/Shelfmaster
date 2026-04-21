@@ -430,6 +430,10 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+app.get("/api/test", (req, res) => {
+  res.json({ message: "Server OK" });
+});
+
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const db = await ensureDatabase();

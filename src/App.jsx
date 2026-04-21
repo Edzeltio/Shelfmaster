@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaCog } from "react-icons/fa";
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 
 // Public Pages
@@ -22,6 +23,7 @@ import PendingRequests from './PendingRequests';
 import ProcessReturns from './ProcessReturns';
 import Settings from './Settings';
 import BorrowingHistory from './BorrowingHistory';
+import NetworkSettings from './NetworkSettings';
 
 export default function App() {
   return (
@@ -32,6 +34,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/networksettings" element={<NetworkSettings />} />
 
         {/* 2. STUDENT ROUTES — wrapped in StudentRoute to enforce role + cross-tab session safety */}
         <Route path="/student/home"      element={<StudentRoute><StudentHome /></StudentRoute>} />
@@ -65,13 +68,16 @@ function ConditionalNavbar() {
   const path = location.pathname.toLowerCase();
 
   // Hide the public navbar if on these specific paths or starting with these prefixes
+  
   const isInternalPage = 
     path.startsWith('/librarian') || 
     path.startsWith('/student') || 
     path === '/login' || 
-    path === '/signup';
+    path === '/signup' ||
+    path === '/networksettings';
 
   if (isInternalPage) return null;
+  
 
   return (
     <nav className="navbar">
@@ -82,6 +88,7 @@ function ConditionalNavbar() {
       <div className="nav-links">
         <Link to="/" className="nav-link">Home</Link>
         <Link to="/login" className="btn-sign-in">Sign In</Link>
+        <Link to="/networksettings" className="connection-settings"><FaCog size={30} /></Link>
       </div>
     </nav>
   );

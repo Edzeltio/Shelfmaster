@@ -24,6 +24,7 @@
     "react": "^19.2.5",
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.5",
+    "react-icons": "^5.6.0",
     "react-router-dom": "^7.14.1",
     "recharts": "^3.8.1",
     "uuid": "^13.0.0"

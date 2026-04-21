@@ -16,13 +16,25 @@ export default function NetworkSettings() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const [toast, setToast] = useState({ message: '', type: 'error' });
+  const [lanInfo, setLanInfo] = useState(null);
   const closeToast = () => setToast({ message: '' });
 
   useEffect(() => {
     const saved = getConnection();
     setIp(saved.ip);
     setPort(saved.port);
+    fetch('/api/lan-info')
+      .then(r => r.ok ? r.json() : null)
+      .then(setLanInfo)
+      .catch(() => {});
   }, []);
+
+  const handleDisconnect = () => {
+    setConnection('', '');
+    setIp('');
+    setStatus('Disconnected');
+    setToast({ message: 'Saved server cleared.', type: 'success' });
+  };
 
   const testConnection = async () => {
     if (!ip || !port) {
@@ -94,6 +106,26 @@ export default function NetworkSettings() {
         </button>
 
         <div style={styles.status}>{status}</div>
+
+        {getConnection().ip && (
+          <button onClick={handleDisconnect} style={{ ...styles.button, background: '#64748b', marginTop: '10px' }}>
+            Disconnect
+          </button>
+        )}
+
+        {lanInfo && lanInfo.addresses && lanInfo.addresses.length > 0 && (
+          <div style={{ marginTop: '20px', padding: '12px', background: '#F5FAE8', borderRadius: '8px', fontSize: '0.82rem' }}>
+            <p style={{ margin: '0 0 8px 0', fontWeight: 'bold', color: '#365314' }}>📡 Share with other devices on your WiFi:</p>
+            {lanInfo.addresses.map(a => (
+              <div key={a.address} style={{ fontFamily: 'monospace', color: '#1e293b', padding: '2px 0' }}>
+                http://{a.address}:{lanInfo.port}
+              </div>
+            ))}
+            <p style={{ margin: '8px 0 0 0', color: '#475569', fontSize: '0.78rem' }}>
+              Other devices can simply open one of these URLs in their browser — no setup required.
+            </p>
+          </div>
+        )}
 
         <div style={styles.infoBox}>
           <p>💡 Make sure:</p>

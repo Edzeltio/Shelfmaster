@@ -8,6 +8,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -20,7 +21,35 @@ let pool;
 const columnCache = new Map();
 
 app.use(express.json({ limit: '15mb' }));
+
+// CORS — allow LAN devices on a different origin to call this server's API
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.setHeader('Vary', 'Origin');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
+
 app.use('/uploads', express.static(uploadsDir));
+
+function getLanAddresses() {
+  const result = [];
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        result.push({ name, address: iface.address });
+      }
+    }
+  }
+  return result;
+}
 
 function dbConfig(includeDatabase = true) {
   const config = {
@@ -432,6 +461,10 @@ app.get('/api/health', async (_req, res) => {
 
 app.get("/api/test", (req, res) => {
   res.json({ message: "Server OK" });
+});
+
+app.get('/api/lan-info', (_req, res) => {
+  res.json({ port, addresses: getLanAddresses() });
 });
 
 app.post('/api/auth/signup', async (req, res) => {

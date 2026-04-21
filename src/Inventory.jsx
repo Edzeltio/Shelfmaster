@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { localDb } from './localDbClient';
 import { localDbAdmin } from './localDbAdmin';
+import { getBaseURL } from './connectionManager';
+
+function apiUrl(path) {
+  const base = getBaseURL();
+  return base ? base.replace(/\/$/, '') + path : path;
+}
 import BarcodeLabel, { generateBarcode, generateCopyAccessionId } from './BarcodeLabel';
 import { jsPDF } from 'jspdf';
 import JsBarcode from 'jsbarcode';
@@ -154,7 +160,7 @@ export default function Inventory() {
     }
 
     try {
-      const response = await fetch(`/api/books/${book.id}`, {
+      const response = await fetch(apiUrl(`/api/books/${book.id}`), {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -181,7 +187,7 @@ export default function Inventory() {
     }
 
     try {
-      const response = await fetch(`/api/books/${book.id}/unarchive`, {
+      const response = await fetch(apiUrl(`/api/books/${book.id}/unarchive`), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -295,7 +301,7 @@ export default function Inventory() {
       }
 
       try {
-        const response = await fetch(`/api/books/${book.id}/archive`, {
+        const response = await fetch(apiUrl(`/api/books/${book.id}/archive`), {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
@@ -326,7 +332,7 @@ export default function Inventory() {
       throw new Error('Please sign in again.');
     }
 
-    const response = await fetch(url, {
+    const response = await fetch(apiUrl(url), {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,

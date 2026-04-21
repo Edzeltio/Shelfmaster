@@ -1,4 +1,13 @@
+import { getBaseURL } from './connectionManager';
+
 const SESSION_KEY = 'shelfmaster-session';
+
+function buildUrl(url) {
+  if (/^https?:\/\//i.test(url)) return url;
+  const base = getBaseURL();
+  if (!base) return url;
+  return base.replace(/\/$/, '') + url;
+}
 
 function getStoredSession() {
   try {
@@ -23,7 +32,7 @@ function getAuthHeader() {
 }
 
 async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
+  const response = await fetch(buildUrl(url), {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -194,7 +203,7 @@ export const localDb = {
           return { data: null, error: { message: error.message } };
         }
       },
-      getPublicUrl: (filePath) => ({ data: { publicUrl: `/uploads/${filePath}` } }),
+      getPublicUrl: (filePath) => ({ data: { publicUrl: buildUrl(`/uploads/${filePath}`) } }),
     }),
   },
 

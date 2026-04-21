@@ -44,6 +44,7 @@ export default function Inventory() {
   const [books, setBooks] = useState([]);
   const [ebooks, setEbooks] = useState([]);
   const [archivedBooks, setArchivedBooks] = useState([]);
+  const [archivedSearch, setArchivedSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [showEbookModal, setShowEbookModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -875,6 +876,34 @@ export default function Inventory() {
       {/* ARCHIVED BOOKS TABLE */}
       {activeTab === 'archived' && (
         <div style={tableCardStyle}>
+          <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: '#94a3b8', fontSize: '1rem' }}>🔍</span>
+            <input
+              type="text"
+              value={archivedSearch}
+              onChange={e => setArchivedSearch(e.target.value)}
+              placeholder="Search archived books by title, author, or accession #"
+              style={{ flex: 1, padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.9rem', outline: 'none' }}
+            />
+            {archivedSearch && (
+              <button
+                onClick={() => setArchivedSearch('')}
+                style={{ background: '#f1f5f9', color: '#64748b', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 'bold' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          {(() => {
+            const q = archivedSearch.trim().toLowerCase();
+            const filtered = q
+              ? archivedBooks.filter(b =>
+                  (b.title || '').toLowerCase().includes(q) ||
+                  (b.authors || '').toLowerCase().includes(q) ||
+                  String(b.accession_num || '').toLowerCase().includes(q)
+                )
+              : archivedBooks;
+            return (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ textAlign: 'left', background: '#fff1f2', color: '#475569' }}>
@@ -885,10 +914,14 @@ export default function Inventory() {
               </tr>
             </thead>
             <tbody>
-              {archivedBooks.length === 0 ? (
-                <tr><td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No archived books. Books you archive will appear here.</td></tr>
+              {filtered.length === 0 ? (
+                <tr><td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                  {archivedBooks.length === 0
+                    ? 'No archived books. Books you archive will appear here.'
+                    : `No archived books match "${archivedSearch}".`}
+                </td></tr>
               ) : (
-                archivedBooks.map(book => (
+                filtered.map(book => (
                   <tr key={book.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                     <td style={tdStyle}>
                       <strong>{book.title}</strong>
@@ -913,6 +946,8 @@ export default function Inventory() {
               )}
             </tbody>
           </table>
+            );
+          })()}
         </div>
       )}
 

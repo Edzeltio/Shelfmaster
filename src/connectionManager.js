@@ -1,6 +1,6 @@
 let config = {
   ip: localStorage.getItem("server_ip") || "",
-  port: localStorage.getItem("server_port") || "3000"
+  port: localStorage.getItem("server_port") || "5000"
 };
 
 export function setConnection(ip, port) {

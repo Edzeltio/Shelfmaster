@@ -15,7 +15,7 @@ export default function NetworkSettings() {
   const [status, setStatus] = useState("Not connected");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-      const [toast, setToast] = useState({ message: '', type: 'error' });
+  const [toast, setToast] = useState({ message: '', type: 'error' });
   const closeToast = () => setToast({ message: '' });
 
   useEffect(() => {
@@ -39,12 +39,15 @@ export default function NetworkSettings() {
       if (res.ok) {
         setConnection(ip, port);
         setStatus("✅ Connected successfully");
-        Navigate("/");
+        setToast({ message: 'Connected successfully!', type: 'success' });
+        setTimeout(() => navigate("/"), 800);
       } else {
         setStatus("⚠️ Server responded with error");
+        setToast({ message: 'Server responded with an error.', type: 'error' });
       }
     } catch (err) {
       setStatus("❌ Cannot reach server");
+      setToast({ message: 'Cannot reach server. Check IP, port, and that both devices are on the same network.', type: 'error' });
     }
 
     setLoading(false);
@@ -52,6 +55,7 @@ export default function NetworkSettings() {
 
   return (
     <div style={styles.container}>
+      <Toast {...toast} onClose={closeToast} />
       <div style={styles.card}>
             <Link to="/" style={homeLinkStyle}>← Back to Home</Link>
         <h2 style={styles.title}>⚙️ Network Connection</h2>
@@ -74,7 +78,7 @@ export default function NetworkSettings() {
           <label>Port</label>
           <input
             type="text"
-            placeholder="3000"
+            placeholder="5000"
             value={port}
             onChange={(e) => setPort(e.target.value)}
             style={styles.input}

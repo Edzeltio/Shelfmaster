@@ -515,6 +515,18 @@ app.post('/api/books/:id/archive', async (req, res) => {
   }
 });
 
+app.post('/api/books/:id/unarchive', async (req, res) => {
+  const db = await requireLibrarian(req, res);
+  if (!db) return;
+
+  try {
+    await db.query('UPDATE books SET status = ? WHERE id = ?', ['active', req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/ebooks', async (req, res) => {
   const db = await requireLibrarian(req, res);
   if (!db) return;

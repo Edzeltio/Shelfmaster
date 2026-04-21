@@ -43,6 +43,7 @@ export default function Inventory() {
   const [activeTab, setActiveTab] = useState('books');
   const [books, setBooks] = useState([]);
   const [ebooks, setEbooks] = useState([]);
+  const [archivedBooks, setArchivedBooks] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [showEbookModal, setShowEbookModal] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -129,7 +130,42 @@ export default function Inventory() {
     const all = data || [];
     setBooks(all.filter(b => b.book_type !== 'eBook'));
     setEbooks(all.filter(b => b.book_type === 'eBook'));
+
+    const { data: archived, error: archErr } = await localDb
+      .from('books')
+      .select('*')
+      .eq('status', 'archived')
+      .order('created_at', { ascending: false });
+
+    if (!archErr) setArchivedBooks(archived || []);
   }
+
+  const handleUnarchive = async (book) => {
+    const confirmed = window.confirm(`Restore "${book.title}" to the active catalog?`);
+    if (!confirmed) return;
+
+    const { data: sessionData } = await localDb.auth.getSession();
+    const token = sessionData?.session?.access_token;
+
+    if (!token) {
+      showToast('Restore failed: please sign in again.', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/books/${book.id}/unarchive`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Restore failed.');
+
+      fetchInventory();
+      showToast(`"${book.title}" restored successfully.`, 'success');
+    } catch (error) {
+      showToast('Restore failed: ' + error.message, 'error');
+    }
+  };
 
   async function getNextCopyNumber() {
     const { data, error } = await localDbAdmin
@@ -639,6 +675,18 @@ export default function Inventory() {
         >
           📱 eBooks <span style={{ marginLeft: '6px', background: activeTab === 'ebooks' ? '#eef2ff' : '#f1f5f9', color: activeTab === 'ebooks' ? '#6366f1' : '#94a3b8', borderRadius: '10px', padding: '1px 8px', fontSize: '0.8rem' }}>{ebooks.length}</span>
         </button>
+        <button
+          onClick={() => setActiveTab('archived')}
+          style={{
+            padding: '10px 28px', border: 'none', background: 'transparent', cursor: 'pointer',
+            fontWeight: 'bold', fontSize: '0.95rem',
+            color: activeTab === 'archived' ? '#e11d48' : '#94a3b8',
+            borderBottom: activeTab === 'archived' ? '3px solid #e11d48' : '3px solid transparent',
+            marginBottom: '-2px', transition: 'all 0.15s'
+          }}
+        >
+          🗄️ Archived <span style={{ marginLeft: '6px', background: activeTab === 'archived' ? '#fff1f2' : '#f1f5f9', color: activeTab === 'archived' ? '#e11d48' : '#94a3b8', borderRadius: '10px', padding: '1px 8px', fontSize: '0.8rem' }}>{archivedBooks.length}</span>
+        </button>
       </div>
 
       {/* PHYSICAL BOOKS TABLE */}
@@ -822,6 +870,50 @@ export default function Inventory() {
             </div>
           )}
         </>
+      )}
+
+      {/* ARCHIVED BOOKS TABLE */}
+      {activeTab === 'archived' && (
+        <div style={tableCardStyle}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', background: '#fff1f2', color: '#475569' }}>
+                <th style={thStyle}>Title</th>
+                <th style={thStyle}>Author</th>
+                <th style={thStyle}>Type</th>
+                <th style={thStyle}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {archivedBooks.length === 0 ? (
+                <tr><td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No archived books. Books you archive will appear here.</td></tr>
+              ) : (
+                archivedBooks.map(book => (
+                  <tr key={book.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={tdStyle}>
+                      <strong>{book.title}</strong>
+                      <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '2px' }}>Acc# {book.accession_num}</div>
+                    </td>
+                    <td style={tdStyle}>{book.authors}</td>
+                    <td style={tdStyle}>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                        {book.book_type === 'eBook' ? '📱 eBook' : '📚 Physical'}
+                      </span>
+                    </td>
+                    <td style={tdStyle}>
+                      <button
+                        onClick={() => handleUnarchive(book)}
+                        style={{ background: '#dcfce7', color: '#059669', border: '1px solid #bbf7d0', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.82rem' }}
+                      >
+                        ♻️ Restore
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* EBOOK MODAL */}

@@ -49,8 +49,9 @@ export default function StudentHome() {
       // Fallback: show recently added books
       const { data: recent } = await localDbAdmin
         .from('books')
-        .select('id, title, authors, cover_image, quantity, category, subject_class')
+        .select('id, title, authors, cover_image, quantity, category, subject_class, book_type')
         .neq('status', 'archived')
+        .neq('book_type', 'eBook')
         .order('created_at', { ascending: false })
         .limit(8);
       setPopularBooks((recent || []).map(b => ({ ...b, borrow_count: 0 })));
@@ -72,9 +73,10 @@ export default function StudentHome() {
 
     const { data: books } = await localDbAdmin
       .from('books')
-      .select('id, title, authors, cover_image, quantity, category, subject_class')
+      .select('id, title, authors, cover_image, quantity, category, subject_class, book_type')
       .in('id', topIds)
-      .neq('status', 'archived');
+      .neq('status', 'archived')
+      .neq('book_type', 'eBook');
 
     // Re-sort to match popularity order and attach count
     const sorted = topIds

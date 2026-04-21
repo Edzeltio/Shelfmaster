@@ -44,6 +44,7 @@ export default function StudentNavbar() {
       <div style={linksContainerStyle}>
         <Link to="/student/dashboard" style={linkStyle}>Home</Link>
         <Link to="/student/catalog" style={linkStyle}>Catalog</Link>
+        <Link to="/student/ebooks" style={linkStyle}>eBooks</Link>
         <Link to="/student/books" style={linkStyle}>My Books</Link>
         <Link to="/student/profile" style={linkStyle}>Profile</Link>
         

@@ -11,6 +11,7 @@ import Signup from './Signup';
 import StudentRoute from './StudentRoute';
 import StudentHome from './StudentHome';
 import StudentCatalog from './StudentCatalog';
+import StudentEbooks from './StudentEbooks';
 import StudentBooks from './StudentBooks';
 import StudentProfile from './StudentProfile'
 
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/student/home"      element={<StudentRoute><StudentHome /></StudentRoute>} />
         <Route path="/student/dashboard" element={<StudentRoute><StudentHome /></StudentRoute>} />
         <Route path="/student/catalog"   element={<StudentRoute><StudentCatalog /></StudentRoute>} />
+        <Route path="/student/ebooks"    element={<StudentRoute><StudentEbooks /></StudentRoute>} />
         <Route path="/student/cart"      element={<Navigate to="/student/books" replace />} />
         <Route path="/student/books"     element={<StudentRoute><StudentBooks /></StudentRoute>} />
         <Route path="/student/profile"   element={<StudentRoute><StudentProfile /></StudentRoute>} />

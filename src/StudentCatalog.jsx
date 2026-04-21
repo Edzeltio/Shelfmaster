@@ -22,7 +22,7 @@ export default function StudentCatalog() {
   async function fetchBooks() {
     setLoading(true);
     const { data, error } = await localDb.from('books').select('*').neq('status', 'archived');
-    if (!error) setBooks(data || []);
+    if (!error) setBooks((data || []).filter(b => b.book_type !== 'eBook'));
     setLoading(false);
   }
 

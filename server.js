@@ -52,14 +52,20 @@ function getLanAddresses() {
 }
 
 function dbConfig(includeDatabase = true) {
+  // Force IPv4 — on Windows "localhost" often resolves to ::1 (IPv6) first,
+  // which then times out because XAMPP MySQL only listens on IPv4.
+  let host = process.env.DB_HOST || '127.0.0.1';
+  if (host.toLowerCase() === 'localhost') host = '127.0.0.1';
+
   const config = {
-    host: process.env.DB_HOST || '127.0.0.1',
+    host,
     port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     waitForConnections: true,
     connectionLimit: 10,
     namedPlaceholders: false,
+    connectTimeout: 5000,
   };
 
   if (includeDatabase) {
@@ -67,6 +73,40 @@ function dbConfig(includeDatabase = true) {
   }
 
   return config;
+}
+
+async function checkMysqlAvailable() {
+  const cfg = dbConfig(false);
+  try {
+    const conn = await mysql.createConnection(cfg);
+    await conn.ping();
+    await conn.end();
+    console.log(`[db] MySQL reachable at ${cfg.host}:${cfg.port} as user "${cfg.user}".`);
+    return true;
+  } catch (err) {
+    console.error('\n========================================');
+    console.error(' ❌ Cannot connect to MySQL');
+    console.error('========================================');
+    console.error(` Host:  ${cfg.host}:${cfg.port}`);
+    console.error(` User:  ${cfg.user}`);
+    console.error(` Error: ${err.code || ''} ${err.message}`);
+    console.error('');
+    if (err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED') {
+      console.error(' ➜ Open XAMPP Control Panel and START the MySQL module.');
+      console.error(' ➜ Make sure MySQL is on port 3306 (XAMPP default).');
+      console.error(' ➜ If you use a different port/password, create a .env file');
+      console.error('    next to server.js with:');
+      console.error('       DB_HOST=127.0.0.1');
+      console.error('       DB_PORT=3306');
+      console.error('       DB_USER=root');
+      console.error('       DB_PASSWORD=');
+      console.error('       DB_NAME=shelfmaster');
+    } else if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error(' ➜ Wrong DB_USER / DB_PASSWORD. Check your .env file.');
+    }
+    console.error('========================================\n');
+    return false;
+  }
 }
 
 async function ensureDatabase() {
@@ -658,6 +698,7 @@ if (isProduction) {
   app.use(vite.middlewares);
 }
 
-app.listen(port, '0.0.0.0', () => {
+app.listen(port, '0.0.0.0', async () => {
   console.log(`ShelfMaster running on port ${port}`);
+  await checkMysqlAvailable();
 });

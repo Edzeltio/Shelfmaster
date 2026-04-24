@@ -7,13 +7,8 @@ export default function WalkIn() {
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const showToast = (message, type = 'success') => setToast({ message, type });
 
-  const [users, setUsers] = useState([]);
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // Teacher flow — pick existing teacher account
-  const [userQuery, setUserQuery] = useState('');
-  const [selectedUser, setSelectedUser] = useState(null);
 
   // Student flow — fillable form
   const [studentForm, setStudentForm] = useState({
@@ -21,6 +16,14 @@ export default function WalkIn() {
     gradeSection: '',
     lrn: '',
     teacherName: '',
+  });
+
+  // Teacher flow — fillable form
+  const [teacherForm, setTeacherForm] = useState({
+    fullName: '',
+    employeeId: '',
+    department: '',
+    contact: '',
   });
 
   // Books (both flows) — each entry: { ...book, days }
@@ -32,38 +35,17 @@ export default function WalkIn() {
   useEffect(() => {
     if (!borrowerType) return;
     setLoading(true);
-    const teacherFetch = borrowerType === 'teacher'
-      ? localDbAdmin
-          .from('users')
-          .select('id, name, student_id, course_year, role, status')
-          .eq('role', 'teacher')
-          .order('name', { ascending: true })
-      : Promise.resolve({ data: [] });
-
-    Promise.all([
-      teacherFetch,
-      localDbAdmin
-        .from('books')
-        .select('id, title, authors, barcode, accession_num, quantity, book_type, status, cover_image, category')
-        .eq('status', 'active')
-        .order('title', { ascending: true }),
-    ]).then(([uRes, bRes]) => {
-      if (uRes.error) showToast('Failed to load teachers: ' + uRes.error.message, 'error');
-      else setUsers((uRes.data || []).filter(u => u.status !== 'inactive'));
-      if (bRes.error) showToast('Failed to load books: ' + bRes.error.message, 'error');
-      else setBooks((bRes.data || []).filter(b => (b.book_type || '').toLowerCase() !== 'ebook'));
-      setLoading(false);
-    });
+    localDbAdmin
+      .from('books')
+      .select('id, title, authors, barcode, accession_num, quantity, book_type, status, cover_image, category')
+      .eq('status', 'active')
+      .order('title', { ascending: true })
+      .then((bRes) => {
+        if (bRes.error) showToast('Failed to load books: ' + bRes.error.message, 'error');
+        else setBooks((bRes.data || []).filter(b => (b.book_type || '').toLowerCase() !== 'ebook'));
+        setLoading(false);
+      });
   }, [borrowerType]);
-
-  const filteredUsers = useMemo(() => {
-    const q = userQuery.trim().toLowerCase();
-    if (!q) return users.slice(0, 8);
-    return users.filter(u =>
-      (u.name || '').toLowerCase().includes(q) ||
-      (u.student_id || '').toLowerCase().includes(q)
-    ).slice(0, 8);
-  }, [users, userQuery]);
 
   const filteredBooks = useMemo(() => {
     const q = bookQuery.trim().toLowerCase();
@@ -80,11 +62,10 @@ export default function WalkIn() {
 
   const reset = () => {
     setBorrowerType(null);
-    setSelectedUser(null);
     setBorrowList([]);
-    setUserQuery('');
     setBookQuery('');
     setStudentForm({ fullName: '', gradeSection: '', lrn: '', teacherName: '' });
+    setTeacherForm({ fullName: '', employeeId: '', department: '', contact: '' });
   };
 
   const addBook = (b) => {
@@ -129,14 +110,20 @@ export default function WalkIn() {
     return null;
   };
 
+  const validateTeacherForm = () => {
+    const { fullName, employeeId, department, contact } = teacherForm;
+    if (!fullName.trim()) return 'Full name is required.';
+    if (!employeeId.trim()) return 'Employee ID is required.';
+    if (!department.trim()) return 'Department / subject is required.';
+    if (!contact.trim()) return 'Contact number or email is required.';
+    return null;
+  };
+
   const handleSubmit = async () => {
     const isTeacher = borrowerType === 'teacher';
 
-    if (isTeacher && !selectedUser) return showToast('Please select a teacher.', 'error');
-    if (!isTeacher) {
-      const err = validateStudentForm();
-      if (err) return showToast(err, 'error');
-    }
+    const err = isTeacher ? validateTeacherForm() : validateStudentForm();
+    if (err) return showToast(err, 'error');
     if (borrowList.length === 0) return showToast('Please add at least one book.', 'error');
     if (!isTeacher && borrowList.some(b => !b.days || b.days < 1)) {
       return showToast('All books must have at least 1 borrowing day.', 'error');
@@ -166,14 +153,19 @@ export default function WalkIn() {
             : new Date(Date.now() + book.days * 86400000).toISOString();
 
           const payload = {
-            user_id: isTeacher ? selectedUser.id : null,
+            user_id: null,
             book_id: book.id,
             status,
             borrow_date: borrowDate,
             due_date: dueDate,
             copy_id: copy?.id || null,
           };
-          if (!isTeacher) {
+          if (isTeacher) {
+            payload.walk_in_name = teacherForm.fullName.trim();
+            payload.walk_in_employee_id = teacherForm.employeeId.trim();
+            payload.walk_in_department = teacherForm.department.trim();
+            payload.walk_in_contact = teacherForm.contact.trim();
+          } else {
             payload.walk_in_name = studentForm.fullName.trim();
             payload.walk_in_grade_section = studentForm.gradeSection.trim();
             payload.walk_in_lrn = studentForm.lrn.trim();
@@ -199,7 +191,7 @@ export default function WalkIn() {
         }
       }
 
-      const borrowerName = isTeacher ? selectedUser.name : studentForm.fullName.trim();
+      const borrowerName = isTeacher ? teacherForm.fullName.trim() : studentForm.fullName.trim();
       if (success > 0) {
         showToast(
           `${success} book${success > 1 ? 's' : ''} issued to ${borrowerName}.` +
@@ -285,41 +277,20 @@ export default function WalkIn() {
             <h3 style={sectionTitleStyle}>1. {isTeacher ? 'Teacher' : 'Student'} Information</h3>
 
             {isTeacher ? (
-              !selectedUser ? (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Search by name or staff ID..."
-                    value={userQuery}
-                    onChange={(e) => setUserQuery(e.target.value)}
-                    style={inputStyle}
-                  />
-                  <div style={listStyle}>
-                    {filteredUsers.length === 0 ? (
-                      <div style={emptyListStyle}>No matching teachers found.</div>
-                    ) : (
-                      filteredUsers.map(u => (
-                        <button key={u.id} onClick={() => setSelectedUser(u)} style={listItemStyle}>
-                          <div style={{ fontWeight: 600, color: 'var(--dark-blue)' }}>{u.name}</div>
-                          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                            {u.student_id ? `ID: ${u.student_id}` : 'No ID'} · {u.course_year || '—'}
-                          </div>
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '14px' }}>
-                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dark-blue)' }}>{selectedUser.name}</div>
-                  <div style={{ marginTop: '6px', fontSize: '0.85rem', color: '#475569' }}>
-                    <strong>Staff ID:</strong> {selectedUser.student_id || '—'}
-                  </div>
-                  <button onClick={() => setSelectedUser(null)} style={{ ...backBtnStyle, marginTop: '12px' }}>
-                    Change teacher
-                  </button>
-                </div>
-              )
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <Field label="Full Name *" value={teacherForm.fullName}
+                  onChange={(v) => setTeacherForm(f => ({ ...f, fullName: v }))}
+                  placeholder="Ms. Maria Reyes" />
+                <Field label="Employee ID *" value={teacherForm.employeeId}
+                  onChange={(v) => setTeacherForm(f => ({ ...f, employeeId: v }))}
+                  placeholder="EMP-2026-001" />
+                <Field label="Department / Subject *" value={teacherForm.department}
+                  onChange={(v) => setTeacherForm(f => ({ ...f, department: v }))}
+                  placeholder="Science Department" />
+                <Field label="Contact Number / Email *" value={teacherForm.contact}
+                  onChange={(v) => setTeacherForm(f => ({ ...f, contact: v }))}
+                  placeholder="0917-123-4567 or m.reyes@school.edu" />
+              </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
                 <Field label="Full Name *" value={studentForm.fullName}

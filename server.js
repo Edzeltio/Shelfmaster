@@ -204,6 +204,9 @@ async function createTables() {
     `ALTER TABLE transactions ADD COLUMN walk_in_grade_section VARCHAR(100) NULL`,
     `ALTER TABLE transactions ADD COLUMN walk_in_lrn VARCHAR(50) NULL`,
     `ALTER TABLE transactions ADD COLUMN walk_in_teacher VARCHAR(255) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_employee_id VARCHAR(50) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_department VARCHAR(150) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_contact VARCHAR(100) NULL`,
   ]) {
     try { await db.query(alter); } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
   }

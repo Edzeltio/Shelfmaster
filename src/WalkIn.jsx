@@ -22,7 +22,7 @@ export default function WalkIn() {
   const [teacherForm, setTeacherForm] = useState({
     fullName: '',
     employeeId: '',
-    department: '',
+    gradeSection: '',
     contact: '',
   });
 
@@ -47,25 +47,31 @@ export default function WalkIn() {
       });
   }, [borrowerType]);
 
+  // Count how many times each book is already in the borrow list
+  const inListCounts = useMemo(() => {
+    const m = new Map();
+    for (const b of borrowList) m.set(b.id, (m.get(b.id) || 0) + 1);
+    return m;
+  }, [borrowList]);
+
   const filteredBooks = useMemo(() => {
     const q = bookQuery.trim().toLowerCase();
-    const pool = books.filter(b => !borrowList.some(sb => sb.id === b.id));
-    if (!q) return pool;
-    return pool.filter(b =>
+    if (!q) return books;
+    return books.filter(b =>
       (b.title || '').toLowerCase().includes(q) ||
       (b.authors || '').toLowerCase().includes(q) ||
       (b.barcode || '').toLowerCase().includes(q) ||
       (b.accession_num || '').toLowerCase().includes(q) ||
       (b.category || '').toLowerCase().includes(q)
     );
-  }, [books, bookQuery, borrowList]);
+  }, [books, bookQuery]);
 
   const reset = () => {
     setBorrowerType(null);
     setBorrowList([]);
     setBookQuery('');
     setStudentForm({ fullName: '', gradeSection: '', lrn: '', teacherName: '' });
-    setTeacherForm({ fullName: '', employeeId: '', department: '', contact: '' });
+    setTeacherForm({ fullName: '', employeeId: '', gradeSection: '', contact: '' });
   };
 
   const addBook = (b) => {
@@ -73,14 +79,19 @@ export default function WalkIn() {
       showToast(`"${b.title}" has no available copies.`, 'error');
       return;
     }
-    setBorrowList(prev => [...prev, { ...b, days: 7 }]);
-    setBookQuery('');
+    const alreadyInList = borrowList.filter(sb => sb.id === b.id).length;
+    if (alreadyInList >= b.quantity) {
+      showToast(`Only ${b.quantity} copy/copies of "${b.title}" are available.`, 'error');
+      return;
+    }
+    const uid = `${b.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setBorrowList(prev => [...prev, { ...b, days: 7, uid }]);
   };
 
-  const removeBook = (id) => setBorrowList(prev => prev.filter(b => b.id !== id));
+  const removeBook = (uid) => setBorrowList(prev => prev.filter(b => b.uid !== uid));
 
-  const updateDays = (id, days) => {
-    setBorrowList(prev => prev.map(b => b.id === id ? { ...b, days: Math.max(1, parseInt(days) || 1) } : b));
+  const updateDays = (uid, days) => {
+    setBorrowList(prev => prev.map(b => b.uid === uid ? { ...b, days: Math.max(1, parseInt(days) || 1) } : b));
   };
 
   const assignAvailableCopy = async (bookId) => {
@@ -111,10 +122,10 @@ export default function WalkIn() {
   };
 
   const validateTeacherForm = () => {
-    const { fullName, employeeId, department, contact } = teacherForm;
+    const { fullName, employeeId, gradeSection, contact } = teacherForm;
     if (!fullName.trim()) return 'Full name is required.';
     if (!employeeId.trim()) return 'Employee ID is required.';
-    if (!department.trim()) return 'Department / subject is required.';
+    if (!gradeSection.trim()) return 'Grade & section / strand is required.';
     if (!contact.trim()) return 'Contact number or email is required.';
     return null;
   };
@@ -163,7 +174,7 @@ export default function WalkIn() {
           if (isTeacher) {
             payload.walk_in_name = teacherForm.fullName.trim();
             payload.walk_in_employee_id = teacherForm.employeeId.trim();
-            payload.walk_in_department = teacherForm.department.trim();
+            payload.walk_in_grade_section = teacherForm.gradeSection.trim();
             payload.walk_in_contact = teacherForm.contact.trim();
           } else {
             payload.walk_in_name = studentForm.fullName.trim();
@@ -284,9 +295,9 @@ export default function WalkIn() {
                 <Field label="Employee ID *" value={teacherForm.employeeId}
                   onChange={(v) => setTeacherForm(f => ({ ...f, employeeId: v }))}
                   placeholder="EMP-2026-001" />
-                <Field label="Department / Subject *" value={teacherForm.department}
-                  onChange={(v) => setTeacherForm(f => ({ ...f, department: v }))}
-                  placeholder="Science Department" />
+                <Field label="Grade & Section / Strand *" value={teacherForm.gradeSection}
+                  onChange={(v) => setTeacherForm(f => ({ ...f, gradeSection: v }))}
+                  placeholder="Grade 7 - Section A  /  Grade 11 - STEM A" />
                 <Field label="Contact Number / Email *" value={teacherForm.contact}
                   onChange={(v) => setTeacherForm(f => ({ ...f, contact: v }))}
                   placeholder="0917-123-4567 or m.reyes@school.edu" />
@@ -298,7 +309,7 @@ export default function WalkIn() {
                   placeholder="Juan Dela Cruz" />
                 <Field label="Grade & Section / Strand *" value={studentForm.gradeSection}
                   onChange={(v) => setStudentForm(f => ({ ...f, gradeSection: v }))}
-                  placeholder="Grade 11 - STEM A" />
+                  placeholder="Grade 1 to Grade 12 (e.g. Grade 8 - Section B, Grade 12 - HUMSS)" />
                 <Field label="LRN *" value={studentForm.lrn}
                   onChange={(v) => setStudentForm(f => ({ ...f, lrn: v }))}
                   placeholder="123456789012" />
@@ -335,26 +346,54 @@ export default function WalkIn() {
                   No books match your search.
                 </div>
               ) : (
-                filteredBooks.map(b => (
-                  <button key={b.id} onClick={() => addBook(b)} style={bookCardStyle}>
-                    <div style={coverWrapStyle}>
-                      {b.cover_image
-                        ? <img src={b.cover_image} alt={b.title} style={coverImgStyle} onError={(e) => { e.target.style.display = 'none'; }} />
-                        : <div style={coverPlaceholderStyle}>📚</div>}
-                    </div>
-                    <div style={{ padding: '8px 6px 6px' }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--dark-blue)', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {b.title}
+                filteredBooks.map(b => {
+                  const inCart = inListCounts.get(b.id) || 0;
+                  const remaining = Math.max(0, b.quantity - inCart);
+                  const disabled = remaining <= 0;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => addBook(b)}
+                      disabled={disabled}
+                      style={{
+                        ...bookCardStyle,
+                        opacity: disabled ? 0.55 : 1,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        position: 'relative',
+                        borderColor: inCart > 0 ? 'var(--green)' : '#e2e8f0',
+                      }}
+                    >
+                      {inCart > 0 && (
+                        <div style={{
+                          position: 'absolute', top: '6px', right: '6px',
+                          background: 'var(--green)', color: 'white',
+                          borderRadius: '999px', minWidth: '24px', height: '24px',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '0.75rem', fontWeight: 800, zIndex: 2,
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                        }}>
+                          {inCart}
+                        </div>
+                      )}
+                      <div style={coverWrapStyle}>
+                        {b.cover_image
+                          ? <img src={b.cover_image} alt={b.title} style={coverImgStyle} onError={(e) => { e.target.style.display = 'none'; }} />
+                          : <div style={coverPlaceholderStyle}>📚</div>}
                       </div>
-                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {b.authors || '—'}
+                      <div style={{ padding: '8px 6px 6px' }}>
+                        <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--dark-blue)', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {b.title}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {b.authors || '—'}
+                        </div>
+                        <div style={{ fontSize: '0.68rem', color: remaining > 0 ? 'var(--green)' : '#ef4444', fontWeight: 600, marginTop: '4px' }}>
+                          {remaining} of {b.quantity} available
+                        </div>
                       </div>
-                      <div style={{ fontSize: '0.68rem', color: b.quantity > 0 ? 'var(--green)' : '#ef4444', fontWeight: 600, marginTop: '4px' }}>
-                        {b.quantity} available
-                      </div>
-                    </div>
-                  </button>
-                ))
+                    </button>
+                  );
+                })
               )}
             </div>
           </section>
@@ -369,36 +408,47 @@ export default function WalkIn() {
               <div style={emptyListStyle}>No books added yet. Tap a book above to add it.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {borrowList.map(b => (
-                  <div key={b.id} style={borrowRowStyle}>
-                    <div style={{ width: '50px', height: '70px', flexShrink: 0 }}>
-                      {b.cover_image
-                        ? <img src={b.cover_image} alt={b.title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
-                        : <div style={{ ...coverPlaceholderStyle, height: '100%', fontSize: '1.4rem' }}>📚</div>}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 700, color: 'var(--dark-blue)', fontSize: '0.92rem' }}>{b.title}</div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{b.authors || '—'}</div>
-                    </div>
-                    {!isTeacher && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end', minWidth: '160px' }}>
-                        <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>Borrow days (min 1)</label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={365}
-                          value={b.days}
-                          onChange={(e) => updateDays(b.id, e.target.value)}
-                          style={{ ...inputStyle, width: '90px', padding: '6px 8px', textAlign: 'center' }}
-                        />
-                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                          Return by: <strong>{new Date(Date.now() + b.days * 86400000).toLocaleDateString()}</strong>
-                        </div>
+                {borrowList.map((b, idx) => {
+                  const sameBookIndex = borrowList.filter((x, i) => x.id === b.id && i <= idx).length;
+                  const totalSameBook = borrowList.filter(x => x.id === b.id).length;
+                  return (
+                    <div key={b.uid} style={borrowRowStyle}>
+                      <div style={{ width: '50px', height: '70px', flexShrink: 0, position: 'relative' }}>
+                        {b.cover_image
+                          ? <img src={b.cover_image} alt={b.title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+                          : <div style={{ ...coverPlaceholderStyle, height: '100%', fontSize: '1.4rem' }}>📚</div>}
                       </div>
-                    )}
-                    <button onClick={() => removeBook(b.id)} style={removeBtnStyle} title="Remove">×</button>
-                  </div>
-                ))}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, color: 'var(--dark-blue)', fontSize: '0.92rem' }}>
+                          {b.title}
+                          {totalSameBook > 1 && (
+                            <span style={{ marginLeft: '6px', fontSize: '0.72rem', color: 'var(--green)', fontWeight: 700 }}>
+                              (copy {sameBookIndex} of {totalSameBook})
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{b.authors || '—'}</div>
+                      </div>
+                      {!isTeacher && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end', minWidth: '160px' }}>
+                          <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>Borrow days (min 1)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={b.days}
+                            onChange={(e) => updateDays(b.uid, e.target.value)}
+                            style={{ ...inputStyle, width: '90px', padding: '6px 8px', textAlign: 'center' }}
+                          />
+                          <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                            Return by: <strong>{new Date(Date.now() + b.days * 86400000).toLocaleDateString()}</strong>
+                          </div>
+                        </div>
+                      )}
+                      <button onClick={() => removeBook(b.uid)} style={removeBtnStyle} title="Remove">×</button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

@@ -11,31 +11,44 @@ export default function WalkIn() {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Teacher flow — pick existing teacher account
   const [userQuery, setUserQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState(null);
 
-  const [bookQuery, setBookQuery] = useState('');
-  const [selectedBooks, setSelectedBooks] = useState([]);
+  // Student flow — fillable form
+  const [studentForm, setStudentForm] = useState({
+    fullName: '',
+    gradeSection: '',
+    lrn: '',
+    teacherName: '',
+  });
 
-  const [days, setDays] = useState(7);
+  // Books (both flows) — each entry: { ...book, days }
+  const [bookQuery, setBookQuery] = useState('');
+  const [borrowList, setBorrowList] = useState([]);
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (!borrowerType) return;
     setLoading(true);
+    const teacherFetch = borrowerType === 'teacher'
+      ? localDbAdmin
+          .from('users')
+          .select('id, name, student_id, course_year, role, status')
+          .eq('role', 'teacher')
+          .order('name', { ascending: true })
+      : Promise.resolve({ data: [] });
+
     Promise.all([
-      localDbAdmin
-        .from('users')
-        .select('id, name, student_id, course_year, role, status')
-        .eq('role', borrowerType)
-        .order('name', { ascending: true }),
+      teacherFetch,
       localDbAdmin
         .from('books')
-        .select('id, title, authors, barcode, accession_num, quantity, book_type, status')
+        .select('id, title, authors, barcode, accession_num, quantity, book_type, status, cover_image, category')
         .eq('status', 'active')
         .order('title', { ascending: true }),
     ]).then(([uRes, bRes]) => {
-      if (uRes.error) showToast('Failed to load users: ' + uRes.error.message, 'error');
+      if (uRes.error) showToast('Failed to load teachers: ' + uRes.error.message, 'error');
       else setUsers((uRes.data || []).filter(u => u.status !== 'inactive'));
       if (bRes.error) showToast('Failed to load books: ' + bRes.error.message, 'error');
       else setBooks((bRes.data || []).filter(b => (b.book_type || '').toLowerCase() !== 'ebook'));
@@ -54,23 +67,24 @@ export default function WalkIn() {
 
   const filteredBooks = useMemo(() => {
     const q = bookQuery.trim().toLowerCase();
-    const pool = books.filter(b => !selectedBooks.some(sb => sb.id === b.id));
-    if (!q) return pool.slice(0, 8);
+    const pool = books.filter(b => !borrowList.some(sb => sb.id === b.id));
+    if (!q) return pool;
     return pool.filter(b =>
       (b.title || '').toLowerCase().includes(q) ||
       (b.authors || '').toLowerCase().includes(q) ||
       (b.barcode || '').toLowerCase().includes(q) ||
-      (b.accession_num || '').toLowerCase().includes(q)
-    ).slice(0, 8);
-  }, [books, bookQuery, selectedBooks]);
+      (b.accession_num || '').toLowerCase().includes(q) ||
+      (b.category || '').toLowerCase().includes(q)
+    );
+  }, [books, bookQuery, borrowList]);
 
   const reset = () => {
     setBorrowerType(null);
     setSelectedUser(null);
-    setSelectedBooks([]);
+    setBorrowList([]);
     setUserQuery('');
     setBookQuery('');
-    setDays(7);
+    setStudentForm({ fullName: '', gradeSection: '', lrn: '', teacherName: '' });
   };
 
   const addBook = (b) => {
@@ -78,15 +92,15 @@ export default function WalkIn() {
       showToast(`"${b.title}" has no available copies.`, 'error');
       return;
     }
-    if (borrowerType === 'student' && selectedBooks.length >= 1) {
-      setSelectedBooks([b]);
-    } else {
-      setSelectedBooks(prev => [...prev, b]);
-    }
+    setBorrowList(prev => [...prev, { ...b, days: 7 }]);
     setBookQuery('');
   };
 
-  const removeBook = (id) => setSelectedBooks(prev => prev.filter(b => b.id !== id));
+  const removeBook = (id) => setBorrowList(prev => prev.filter(b => b.id !== id));
+
+  const updateDays = (id, days) => {
+    setBorrowList(prev => prev.map(b => b.id === id ? { ...b, days: Math.max(1, parseInt(days) || 1) } : b));
+  };
 
   const assignAvailableCopy = async (bookId) => {
     const { data, error } = await localDbAdmin
@@ -103,30 +117,40 @@ export default function WalkIn() {
 
   const APPROVE_CANDIDATES = ['borrowed', 'approved', 'issued', 'active', 'loaned', 'checked_out', 'released'];
   const resolveBorrowedStatus = async () => {
-    const cached = localStorage.getItem('sm_approve_status');
-    if (cached) return cached;
-    return APPROVE_CANDIDATES[0];
+    return localStorage.getItem('sm_approve_status') || APPROVE_CANDIDATES[0];
+  };
+
+  const validateStudentForm = () => {
+    const { fullName, gradeSection, lrn, teacherName } = studentForm;
+    if (!fullName.trim()) return 'Full name is required.';
+    if (!gradeSection.trim()) return 'Grade & section (or strand) is required.';
+    if (!lrn.trim()) return 'LRN is required.';
+    if (!teacherName.trim()) return 'Teacher\'s name is required.';
+    return null;
   };
 
   const handleSubmit = async () => {
-    if (!selectedUser) return showToast('Please select a borrower.', 'error');
-    if (selectedBooks.length === 0) return showToast('Please add at least one book.', 'error');
-    if (borrowerType === 'student' && (!days || days < 1)) {
-      return showToast('Please enter a valid number of borrowing days.', 'error');
+    const isTeacher = borrowerType === 'teacher';
+
+    if (isTeacher && !selectedUser) return showToast('Please select a teacher.', 'error');
+    if (!isTeacher) {
+      const err = validateStudentForm();
+      if (err) return showToast(err, 'error');
+    }
+    if (borrowList.length === 0) return showToast('Please add at least one book.', 'error');
+    if (!isTeacher && borrowList.some(b => !b.days || b.days < 1)) {
+      return showToast('All books must have at least 1 borrowing day.', 'error');
     }
 
     setSubmitting(true);
     try {
       const status = await resolveBorrowedStatus();
       const borrowDate = new Date().toISOString();
-      const dueDate = borrowerType === 'student'
-        ? new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString()
-        : null;
 
       let success = 0;
       const failures = [];
 
-      for (const book of selectedBooks) {
+      for (const book of borrowList) {
         try {
           const { data: freshBook, error: bErr } = await localDbAdmin
             .from('books').select('quantity').eq('id', book.id).single();
@@ -137,19 +161,27 @@ export default function WalkIn() {
           }
 
           const copy = await assignAvailableCopy(book.id);
+          const dueDate = isTeacher
+            ? null
+            : new Date(Date.now() + book.days * 86400000).toISOString();
 
-          const { data: txn, error: txnErr } = await localDbAdmin
-            .from('transactions')
-            .insert([{
-              user_id: selectedUser.id,
-              book_id: book.id,
-              status,
-              borrow_date: borrowDate,
-              due_date: dueDate,
-              copy_id: copy?.id || null,
-            }])
-            .select()
-            .single();
+          const payload = {
+            user_id: isTeacher ? selectedUser.id : null,
+            book_id: book.id,
+            status,
+            borrow_date: borrowDate,
+            due_date: dueDate,
+            copy_id: copy?.id || null,
+          };
+          if (!isTeacher) {
+            payload.walk_in_name = studentForm.fullName.trim();
+            payload.walk_in_grade_section = studentForm.gradeSection.trim();
+            payload.walk_in_lrn = studentForm.lrn.trim();
+            payload.walk_in_teacher = studentForm.teacherName.trim();
+          }
+
+          const { error: txnErr } = await localDbAdmin
+            .from('transactions').insert([payload]).select().single();
           if (txnErr) throw txnErr;
 
           if (copy) {
@@ -167,17 +199,17 @@ export default function WalkIn() {
         }
       }
 
+      const borrowerName = isTeacher ? selectedUser.name : studentForm.fullName.trim();
       if (success > 0) {
         showToast(
-          `${success} book${success > 1 ? 's' : ''} issued to ${selectedUser.name}.` +
+          `${success} book${success > 1 ? 's' : ''} issued to ${borrowerName}.` +
           (failures.length ? ` ${failures.length} failed.` : ''),
           failures.length ? 'error' : 'success'
         );
+        if (failures.length === 0) reset();
       } else {
         showToast('Walk-in failed: ' + failures.join('; '), 'error');
       }
-
-      if (success > 0) reset();
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
     } finally {
@@ -203,7 +235,7 @@ export default function WalkIn() {
             <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🎓</div>
             <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Student</div>
             <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '6px' }}>
-              Single book, with custom loan duration.
+              Fill in details and pick books with custom due dates.
             </div>
           </button>
           <button onClick={() => setBorrowerType('teacher')} style={typeCardStyle('#FFF0F5', 'var(--maroon)')}>
@@ -246,152 +278,195 @@ export default function WalkIn() {
       {loading ? (
         <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px' }}>
 
-          {/* Borrower */}
+          {/* 1. Borrower info */}
           <section style={cardStyle}>
             <h3 style={sectionTitleStyle}>1. {isTeacher ? 'Teacher' : 'Student'} Information</h3>
 
-            {!selectedUser ? (
-              <>
-                <input
-                  type="text"
-                  placeholder={`Search by name${isTeacher ? ' or staff ID' : ' or student ID'}...`}
-                  value={userQuery}
-                  onChange={(e) => setUserQuery(e.target.value)}
-                  style={inputStyle}
-                />
-                <div style={listStyle}>
-                  {filteredUsers.length === 0 ? (
-                    <div style={emptyListStyle}>No matching {borrowerType}s found.</div>
-                  ) : (
-                    filteredUsers.map(u => (
-                      <button key={u.id} onClick={() => setSelectedUser(u)} style={listItemStyle}>
-                        <div style={{ fontWeight: 600, color: 'var(--dark-blue)' }}>{u.name}</div>
-                        <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                          {u.student_id ? `ID: ${u.student_id}` : 'No ID'} · {u.course_year || '—'}
-                        </div>
-                      </button>
-                    ))
-                  )}
+            {isTeacher ? (
+              !selectedUser ? (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Search by name or staff ID..."
+                    value={userQuery}
+                    onChange={(e) => setUserQuery(e.target.value)}
+                    style={inputStyle}
+                  />
+                  <div style={listStyle}>
+                    {filteredUsers.length === 0 ? (
+                      <div style={emptyListStyle}>No matching teachers found.</div>
+                    ) : (
+                      filteredUsers.map(u => (
+                        <button key={u.id} onClick={() => setSelectedUser(u)} style={listItemStyle}>
+                          <div style={{ fontWeight: 600, color: 'var(--dark-blue)' }}>{u.name}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                            {u.student_id ? `ID: ${u.student_id}` : 'No ID'} · {u.course_year || '—'}
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '14px' }}>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dark-blue)' }}>{selectedUser.name}</div>
+                  <div style={{ marginTop: '6px', fontSize: '0.85rem', color: '#475569' }}>
+                    <strong>Staff ID:</strong> {selectedUser.student_id || '—'}
+                  </div>
+                  <button onClick={() => setSelectedUser(null)} style={{ ...backBtnStyle, marginTop: '12px' }}>
+                    Change teacher
+                  </button>
                 </div>
-                <p style={{ fontSize: '0.78rem', color: '#94a3b8', marginTop: '10px' }}>
-                  Borrower must have an account. Add new {borrowerType}s in User Management.
-                </p>
-              </>
+              )
             ) : (
-              <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '14px' }}>
-                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--dark-blue)' }}>{selectedUser.name}</div>
-                <div style={{ marginTop: '6px', fontSize: '0.85rem', color: '#475569', display: 'grid', gap: '4px' }}>
-                  <div><strong>{isTeacher ? 'Staff ID:' : 'Student ID:'}</strong> {selectedUser.student_id || '—'}</div>
-                  {!isTeacher && (
-                    <div><strong>Grade / Section / Strand:</strong> {selectedUser.course_year || '—'}</div>
-                  )}
-                </div>
-                <button onClick={() => setSelectedUser(null)} style={{ ...backBtnStyle, marginTop: '12px' }}>
-                  Change {borrowerType}
-                </button>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                <Field label="Full Name *" value={studentForm.fullName}
+                  onChange={(v) => setStudentForm(f => ({ ...f, fullName: v }))}
+                  placeholder="Juan Dela Cruz" />
+                <Field label="Grade & Section / Strand *" value={studentForm.gradeSection}
+                  onChange={(v) => setStudentForm(f => ({ ...f, gradeSection: v }))}
+                  placeholder="Grade 11 - STEM A" />
+                <Field label="LRN *" value={studentForm.lrn}
+                  onChange={(v) => setStudentForm(f => ({ ...f, lrn: v }))}
+                  placeholder="123456789012" />
+                <Field label="Teacher's Name *" value={studentForm.teacherName}
+                  onChange={(v) => setStudentForm(f => ({ ...f, teacherName: v }))}
+                  placeholder="Ms. Reyes" />
               </div>
             )}
           </section>
 
-          {/* Books */}
+          {/* 2. Pick books */}
           <section style={cardStyle}>
-            <h3 style={sectionTitleStyle}>
-              2. {isTeacher ? 'Books (Bulk)' : 'Book'}
-            </h3>
+            <h3 style={sectionTitleStyle}>2. Pick Books</h3>
 
             <input
               type="text"
-              placeholder="Search by title, author, barcode..."
+              placeholder="Search by title, author, category, barcode..."
               value={bookQuery}
               onChange={(e) => setBookQuery(e.target.value)}
               style={inputStyle}
-              disabled={!isTeacher && selectedBooks.length >= 1}
             />
 
-            {(isTeacher || selectedBooks.length === 0) && (
-              <div style={listStyle}>
-                {filteredBooks.length === 0 ? (
-                  <div style={emptyListStyle}>No matching books available.</div>
-                ) : (
-                  filteredBooks.map(b => (
-                    <button key={b.id} onClick={() => addBook(b)} style={listItemStyle}>
-                      <div style={{ fontWeight: 600, color: 'var(--dark-blue)' }}>{b.title}</div>
-                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        {b.authors || '—'} · {b.quantity} {b.quantity === 1 ? 'copy' : 'copies'} available
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-
-            {selectedBooks.length > 0 && (
-              <div style={{ marginTop: '12px' }}>
-                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#475569', marginBottom: '6px' }}>
-                  Selected ({selectedBooks.length}):
+            <div style={{
+              marginTop: '14px',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+              gap: '14px',
+              maxHeight: '480px',
+              overflowY: 'auto',
+              padding: '4px',
+            }}>
+              {filteredBooks.length === 0 ? (
+                <div style={{ ...emptyListStyle, gridColumn: '1 / -1' }}>
+                  No books match your search.
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {selectedBooks.map(b => (
-                    <div key={b.id} style={selectedItemStyle}>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{b.title}</div>
-                        <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{b.authors}</div>
-                      </div>
-                      <button onClick={() => removeBook(b.id)} style={removeBtnStyle}>×</button>
+              ) : (
+                filteredBooks.map(b => (
+                  <button key={b.id} onClick={() => addBook(b)} style={bookCardStyle}>
+                    <div style={coverWrapStyle}>
+                      {b.cover_image
+                        ? <img src={b.cover_image} alt={b.title} style={coverImgStyle} onError={(e) => { e.target.style.display = 'none'; }} />
+                        : <div style={coverPlaceholderStyle}>📚</div>}
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    <div style={{ padding: '8px 6px 6px' }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--dark-blue)', lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {b.title}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {b.authors || '—'}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: b.quantity > 0 ? 'var(--green)' : '#ef4444', fontWeight: 600, marginTop: '4px' }}>
+                        {b.quantity} available
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </section>
 
-          {/* Loan terms */}
+          {/* 3. Borrow list */}
           <section style={cardStyle}>
-            <h3 style={sectionTitleStyle}>3. Loan Terms</h3>
-            {isTeacher ? (
-              <div style={{ background: '#FFF0F5', padding: '14px', borderRadius: '8px', color: 'var(--maroon)', fontSize: '0.9rem' }}>
-                Teachers borrow with <strong>no due date</strong>. They keep the books until returned.
-              </div>
+            <h3 style={sectionTitleStyle}>
+              3. Borrow List ({borrowList.length})
+            </h3>
+
+            {borrowList.length === 0 ? (
+              <div style={emptyListStyle}>No books added yet. Tap a book above to add it.</div>
             ) : (
-              <>
-                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>
-                  Number of borrowing days
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={days}
-                  onChange={(e) => setDays(parseInt(e.target.value) || 0)}
-                  style={{ ...inputStyle, marginTop: '6px' }}
-                />
-                {days > 0 && (
-                  <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#475569' }}>
-                    Due date: <strong>{new Date(Date.now() + days * 86400000).toLocaleDateString()}</strong>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {borrowList.map(b => (
+                  <div key={b.id} style={borrowRowStyle}>
+                    <div style={{ width: '50px', height: '70px', flexShrink: 0 }}>
+                      {b.cover_image
+                        ? <img src={b.cover_image} alt={b.title} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} />
+                        : <div style={{ ...coverPlaceholderStyle, height: '100%', fontSize: '1.4rem' }}>📚</div>}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: 'var(--dark-blue)', fontSize: '0.92rem' }}>{b.title}</div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{b.authors || '—'}</div>
+                    </div>
+                    {!isTeacher && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end', minWidth: '160px' }}>
+                        <label style={{ fontSize: '0.72rem', color: '#475569', fontWeight: 600 }}>Borrow days (min 1)</label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={b.days}
+                          onChange={(e) => updateDays(b.id, e.target.value)}
+                          style={{ ...inputStyle, width: '90px', padding: '6px 8px', textAlign: 'center' }}
+                        />
+                        <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                          Return by: <strong>{new Date(Date.now() + b.days * 86400000).toLocaleDateString()}</strong>
+                        </div>
+                      </div>
+                    )}
+                    <button onClick={() => removeBook(b.id)} style={removeBtnStyle} title="Remove">×</button>
                   </div>
-                )}
-              </>
+                ))}
+              </div>
+            )}
+
+            {isTeacher && (
+              <div style={{ marginTop: '12px', background: '#FFF0F5', padding: '10px 14px', borderRadius: '8px', color: 'var(--maroon)', fontSize: '0.85rem' }}>
+                Teachers borrow with <strong>no due date</strong>.
+              </div>
             )}
 
             <button
               onClick={handleSubmit}
-              disabled={submitting || !selectedUser || selectedBooks.length === 0}
+              disabled={submitting || borrowList.length === 0}
               style={{
                 ...submitBtnStyle,
                 marginTop: '20px',
-                background: submitting || !selectedUser || selectedBooks.length === 0
-                  ? '#9ca3af' : 'var(--green)',
-                cursor: submitting || !selectedUser || selectedBooks.length === 0
-                  ? 'not-allowed' : 'pointer',
+                background: submitting || borrowList.length === 0 ? '#9ca3af' : 'var(--green)',
+                cursor: submitting || borrowList.length === 0 ? 'not-allowed' : 'pointer',
               }}
             >
-              {submitting ? 'Issuing...' : `✓ Issue ${selectedBooks.length || ''} Book${selectedBooks.length !== 1 ? 's' : ''}`}
+              {submitting ? 'Issuing...' : `✓ Issue ${borrowList.length || ''} Book${borrowList.length !== 1 ? 's' : ''}`}
             </button>
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, placeholder }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <label style={{ fontSize: '0.78rem', fontWeight: 600, color: '#475569' }}>{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={inputStyle}
+      />
     </div>
   );
 }
@@ -442,22 +517,14 @@ const emptyListStyle = {
   color: '#94a3b8',
   fontSize: '0.85rem',
 };
-const selectedItemStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: '8px 12px',
-  background: '#F5FAE8',
-  border: '1px solid #d9f99d',
-  borderRadius: '8px',
-};
 const removeBtnStyle = {
   background: 'transparent',
   border: 'none',
-  fontSize: '1.4rem',
+  fontSize: '1.6rem',
   cursor: 'pointer',
   color: '#ef4444',
   lineHeight: 1,
+  padding: '0 6px',
 };
 const backBtnStyle = {
   background: 'transparent',
@@ -487,3 +554,44 @@ const typeCardStyle = (bg, color) => ({
   color: 'var(--dark-blue)',
   transition: 'transform 0.15s',
 });
+const bookCardStyle = {
+  background: 'white',
+  border: '1px solid #e2e8f0',
+  borderRadius: '10px',
+  padding: 0,
+  cursor: 'pointer',
+  textAlign: 'left',
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  transition: 'all 0.15s',
+};
+const coverWrapStyle = {
+  width: '100%',
+  paddingTop: '140%',
+  position: 'relative',
+  background: '#F1F5F9',
+};
+const coverImgStyle = {
+  position: 'absolute',
+  top: 0, left: 0, width: '100%', height: '100%',
+  objectFit: 'cover',
+};
+const coverPlaceholderStyle = {
+  position: 'absolute',
+  top: 0, left: 0, width: '100%', height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: '2.5rem',
+  color: '#cbd5e1',
+};
+const borrowRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '12px',
+  padding: '10px',
+  background: '#F8FAFC',
+  border: '1px solid #e2e8f0',
+  borderRadius: '8px',
+};

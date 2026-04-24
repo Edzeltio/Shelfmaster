@@ -198,6 +198,17 @@ async function createTables() {
     INDEX (status)
   )`);
 
+  // Add walk-in borrower columns (idempotent — silently skip if they exist)
+  for (const alter of [
+    `ALTER TABLE transactions ADD COLUMN walk_in_name VARCHAR(255) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_grade_section VARCHAR(100) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_lrn VARCHAR(50) NULL`,
+    `ALTER TABLE transactions ADD COLUMN walk_in_teacher VARCHAR(255) NULL`,
+  ]) {
+    try { await db.query(alter); } catch (e) { if (e.code !== 'ER_DUP_FIELDNAME') throw e; }
+  }
+  columnCache.delete('transactions');
+
   await db.query(`CREATE TABLE IF NOT EXISTS site_content (
     id INT PRIMARY KEY,
     hero_banner_url TEXT,

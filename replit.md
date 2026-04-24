@@ -16,6 +16,8 @@ A web-based library management system (LMS) built with React + Vite, Express.js,
 ## Project Structure
 
 - `server.js` — Express server that hosts the Vite app, creates MySQL tables, handles auth, uploads, and database API calls
+- `electron/main.cjs` — Electron main process: spawns the Express server, opens a BrowserWindow on `http://127.0.0.1:5000`, handles graceful shutdown
+- `electron/preload.cjs` — Electron preload script (exposes `window.shelfmaster`)
 - `xampp_schema.sql` — Optional phpMyAdmin import file for manually creating the local MySQL schema
 - `src/` — All React source files (flat layout)
   - `main.jsx` — Entry point
